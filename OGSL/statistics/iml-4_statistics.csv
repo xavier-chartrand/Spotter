@@ -1,0 +1,19 @@
+# STATION iml-4
+# YEARS   2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023
+
+Parameter,                min,       max,       mean,      std,       set size
+Air Temperature,          -10.1455,  28.6762,   9.2654,    3.8822,    139330
+Humidity,                 nan,       nan,       nan,       nan,       0
+Density,                  1012.0132, 1029.5629, 1020.788,  1.755,     132715
+Pressure,                 97.4244,   105.2613,  101.3429,  0.7837,    139323
+Salinity,                 15.4965,   37.1139,   26.3052,   2.1617,    138292
+Water Temperature,        0,         22.9286,   7.7048,    3.0448,    139621
+Wind Speed,               0,         64.6109,   17.0623,   9.5097,    138810
+Wind Gust,                0,         83.9367,   21.6967,   12.448,    138978
+Wind Direction,           0,         360,       nan,       nan,       0
+Wave Significant Height,  0.02,      3.7188,    0.6765,    0.6085,    137325
+Wave Period,              1.25,      18.0218,   2.828,     1.5194,    138372
+Wave Mean Direction,      0,         360,       nan,       nan,       0
+Wave Peak Direction,      0,         360,       nan,       nan,       0
+Wave Mean Spreading,      0,         80,        nan,       nan,       0
+Wave Peak Spreading,      0,         80,        nan,       nan,       0

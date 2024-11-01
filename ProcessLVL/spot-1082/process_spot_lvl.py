@@ -1,0 +1,234 @@
+#!/usr/bin/python -u
+# Author: Xavier Chartrand
+# Email : x.chartrand@protonmail.me
+#         xavier.chartrand@ec.gc.ca
+
+'''
+Copy and parse Spotter data 'lvl0', 'lvl1' and 'lvl2' to NetCDF.
+
+Directional moments (a1,b1,a2,b2) are computed from raw 3D displacement datas.
+
+Directional spectra are computed for the specified date, hour and minutes,
+usin a weigthed Fourier series.
+
+A Butterworth filter may be applied to filter low or high frequencies, or
+equivalently, low or high scales using the linear dispersion relation for
+surface waves to associate an equivalent frequency.
+'''
+
+# Custom utilities
+from spot_utils import *
+
+## BEGIN STREAM EDITOR
+# Information about the buoy
+# buoy:         Buoy station to process (spot-[0572,1082])
+# year:         Year to process
+# H:            Water depth underneath the platform
+
+# Corrected date for good values
+# cbd:          Begin date (timestamp) for which values start to be good
+# ced:          End date (timestmap) for which values end to be good
+
+# 'filt_p'
+# filt_bool:    Flag to apply ButterWorth filter
+# filt_type:    ButterWorth filter type (lowpass 'lp' or highpass 'hp')
+# filt_data:    Cutoff type (frequency 'freq' or length 'length')
+# C0:           Cutoff parameter depending on 'filt_data'
+
+# Data files and directories
+# rdata_dir:    Raw data directory
+# odata_dir:    OGSL data directory
+# lvl0_dir:     'lvl0' data directory
+# lvl1_dir:     'lvl1' data directory
+# lvl2_dir:     'lvl2' data directory
+# rdata_file:   Raw data file
+# odata_file:   OGSL data file
+# lvl0_file:    'lvl0' file to write
+# lvl1_file:    'lvl1' file to write
+# lvl2_file:    'lvl2' file to write
+# ---------- #
+buoy       = 'spot-1082'
+year       = 2023
+H          = 80
+
+cbd        = '2023-05-30T00:00:00'
+ced        = '2023-08-17T19:30:00'
+
+filt_bool  = True
+filt_type  = 'hp'
+filt_data  = 'length'
+C0         = 2.E2
+
+rdata_dir  = '../../RawData/'
+odata_dir  = '../../OGSL/statistics/'
+lvl0_dir   = '../../lvl0/'
+lvl1_dir   = '../../lvl1/'
+lvl2_dir   = '../../lvl2/'
+rdata_file = 'D.txt'
+odata_file = 'iml-4_statistics.csv'
+lvl0_file  = 'lvl0_displacement.nc'
+lvl1_file  = 'lvl1_spectralvariables.nc'
+lvl2_file  = 'lvl2_bulkparameters.nc'
+# ---------- #
+## END STREAM EDITOR
+
+## MAIN
+# Physical parameters
+rho_0 = 1000                                    # reference density [kg/m3]
+g     = 9.81                                    # gravity acceleration [m/s2]
+
+# Wave monitor parameter
+fs       = 2.5                                  # sampling frequency
+afac     = 3*[1]                                # amplitude factor
+freq_min = 0.03                                 # minimal frequency resolved
+freq_max = 0.8                                  # maximal frequency resolved
+xpos     = 0.0                                  # x position
+ypos     = 0.0                                  # y position
+zpos     = 0.0                                  # z position
+
+# Magnetic declination relative to true north
+magdec = 0
+
+# XYZ index
+xyz_cartesian_index = [-3,-2,-1]
+
+# Update raw data directory with buoy and year
+rdata_dir = '%s/%s/%d/'%(rdata_dir,buoy,year)
+
+# Update files with directories, buoy and year
+rdata_file = os.popen('ls %s*/*/*%s'%(rdata_dir,rdata_file)).read()\
+                     .rstrip('\n').split('\n')
+lvl0_file  = '%s%s_%s_%d.nc'\
+             %(lvl0_dir,buoy.replace('-',''),lvl0_file.split('.nc')[0],year)
+lvl1_file  = '%s%s_%s_%d.nc'\
+             %(lvl1_dir,buoy.replace('-',''),lvl1_file.split('.nc')[0],year)
+lvl2_file  = '%s%s_%s_%d.nc'\
+             %(lvl2_dir,buoy.replace('-',''),lvl2_file.split('.nc')[0],year)
+
+# Create output directories if inexistant
+[sh('mkdir -p %s 2>/dev/null'%d) for d in [lvl0_dir,lvl1_dir,lvl2_dir]]
+
+## OGSL STATISTICS
+# Initialize outputs
+bwp_rmin,bwp_rmax,bwp_std = [[] for _ in range(3)]
+
+# Selection and tickers
+bwp_sel     = ['Wave Significant Height',
+               'Wave Period',
+               'Wave Period',
+               'Wave Period',
+               'Wave Mean Direction',
+               'Wave Mean Direction',
+               'Wave Mean Spreading',
+               'Wave Mean Spreading']
+bwp_tickers = ['Hm0',
+               'Tm-10',
+               'Tm01',
+               'Tm02',
+               'Theta_Mean',
+               'Theta_Peak',
+               'Sigma_Mean',
+               'Sigma_Peak']
+bwp_eps     = [0.02,1/2/fs,1/2/fs,1/2/fs,1,1,1,1]
+
+# Read and append data
+DSogsl = pd.read_csv(odata_dir+odata_file,
+                     delimiter=',',
+                     skipinitialspace=True,
+                     skiprows=3)
+bwp    = np.array([p.rstrip(' ') for p in DSogsl['Parameter']])
+for key in bwp_sel:
+    n_std = 2 if key in ['Wave Period'] else 1
+    bwp_rmin.append(DSogsl['min'][np.where(bwp==key)[0][0]])
+    bwp_rmax.append(DSogsl['max'][np.where(bwp==key)[0][0]])
+    bwp_std.append(n_std*DSogsl['std'][np.where(bwp==key)[0][0]])
+
+# LEVEL GLOBAL PARAMETERS
+lvl_d = {'Info':{'Id':buoy,
+                 'Corrected_Date_Begin':cbd,
+                 'Corrected_Date_End':ced,
+                 'Sampling_Frequency':fs,
+                 'Wave_Record_Length':30*60,
+                 'Aux_Record_Length':30*60,
+                 'Wave_Regular_Length':30*60,
+                 'Aux_Regular_Length':30*60},
+         'Input':{'Raw_File_List':rdata_file,
+                  'Raw_Header_Rows':7},
+         'Output':{'LVL0_File':lvl0_file,
+                   'LVL1_File':lvl1_file,
+                   'LVL2_File':lvl2_file},
+         'Physics_Parameters':{'Ref_Density':rho_0,
+                               'Gravity':g,
+                               'Water_Depth':H},
+         'Wave_Monitor':{'Amplitude_Factor':afac,
+                         'Freq_Min':freq_min,
+                         'Freq_Max':freq_max,
+                         'Magnetic_Declination':magdec,
+                         'X_Position':xpos,
+                         'Y_Position':ypos,
+                         'Z_Position':zpos,
+                         'XYZ_Cartesian_Index':xyz_cartesian_index},
+         'Filtering':{'Filter':filt_bool,
+                      'F_Type':filt_type,
+                      'D_Type':filt_data,
+                      'C0':C0,
+                      'H':H}}
+
+# SHORT-TERM QUALITY FLAG PARAMETERS
+# Test9: "N" based on the number of points to resolve a 1.25s minimal period
+# (operator) value for a sampling frequency of 2.5Hz
+qfst_d = {'Test_9':{'Do_Test':True,
+                    'N':4},
+          'Test_10':{'Do_Test':True,
+                     'N':5,
+                     'm':3},
+          'Test_11':{'Do_Test':False,
+                     'imin':freq_min,
+                     'imax':freq_max,
+                     'lmin':freq_min,
+                     'lmax':freq_max,
+                     'nbins':50},
+          'Test_12':{'Do_Test':True,
+                     'm':int(np.ceil(2*fs/getFrequencies(2*pi/C0,H))),
+                     'delta':1.E-1},
+          'Test_13':{'Do_Test':False,
+                     'N':np.nan}}
+
+# LONG-TERM QUALITY FLAG PARAMETERS
+qflt_d = {'Test_14':{'Do_Test':False,
+                     'wnum':'to_update',
+                     'freq':'to_update',
+                     'H':H,
+                     'CS':'to_update',
+                     'fval':'to_update',
+                     'bwidth':0.1},
+          'Test_15':{'Do_Test':True,
+                     'N':5},
+          'Test_16':{'Do_Test':True,
+                     'Ns':24,
+                     'Nf':48,
+                     'eps':bwp_eps},
+          'Test_17':{'Do_Test':False,
+                     'freq':'to_update',
+                     'CS':'to_update',
+                     'imin':freq_min,
+                     'imax':freq_max,
+                     'lmin':freq_min,
+                     'lmax':freq_max},
+          'Test_18':{'Do_Test':False},
+          'Test_19':{'Do_Test':True,
+                     'rmin':bwp_rmin,
+                     'rmax':bwp_rmax,
+                     'hm0_flag':[]},
+          'Test_20':{'Do_Test':True,
+                     'delta':bwp_std},
+          'Tickers':bwp_tickers}
+
+## OUTPUTS
+# Write 'lvl0' displacement
+writeLvl0(lvl_d,qfst_d)
+
+# Write 'lvl1' spectral variables and bulk wave parameters
+writeLvl1(lvl_d,qflt_d)
+
+# END
