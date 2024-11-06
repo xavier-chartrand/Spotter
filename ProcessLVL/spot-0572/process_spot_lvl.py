@@ -49,7 +49,7 @@ from spot_utils import *
 # ---------- #
 buoy       = 'spot-0572'
 year       = 2023
-H          = 80
+H          = 4
 
 cbd        = '2023-06-06T00:00:00'
 ced        = '2023-06-09T21:30:00'
@@ -65,10 +65,10 @@ lvl0_dir   = '../../lvl0/'
 lvl1_dir   = '../../lvl1/'
 lvl2_dir   = '../../lvl2/'
 rdata_file = 'D.txt'
+ldata_file = 'L.txt'
 odata_file = 'iml-4_statistics.csv'
 lvl0_file  = 'lvl0_displacement.nc'
-lvl1_file  = 'lvl1_spectralvariables.nc'
-lvl2_file  = 'lvl2_bulkparameters.nc'
+lvl1_file  = ['lvl1_spectralvariables.nc','lvl1_wave.nc']
 # ---------- #
 ## END STREAM EDITOR
 
@@ -86,24 +86,28 @@ xpos     = 0.0                                  # x position
 ypos     = 0.0                                  # y position
 zpos     = 0.0                                  # z position
 
+# Compute frequency cutoff
+fcut = getFrequency(2*pi/C0,H)
+
 # Magnetic declination relative to true north
 magdec = 0
 
-# XYZ index
+# X-Y-Z and Longitude-Latitude index
 xyz_cartesian_index = [-3,-2,-1]
 
 # Update raw data directory with buoy and year
 rdata_dir = '%s/%s/%d/'%(rdata_dir,buoy,year)
 
 # Update files with directories, buoy and year
-rdata_file = os.popen('ls %s*/*/*%s'%(rdata_dir,rdata_file)).read()\
-                     .rstrip('\n').split('\n')
-lvl0_file  = '%s%s_%s_%d.nc'\
-             %(lvl0_dir,buoy.replace('-',''),lvl0_file.split('.nc')[0],year)
-lvl1_file  = '%s%s_%s_%d.nc'\
-             %(lvl1_dir,buoy.replace('-',''),lvl1_file.split('.nc')[0],year)
-lvl2_file  = '%s%s_%s_%d.nc'\
-             %(lvl2_dir,buoy.replace('-',''),lvl2_file.split('.nc')[0],year)
+file_fmt     = '%s%s_%s_%d.nc'
+buoy_str     = buoy.replace('-','')
+rdata_file   = os.popen('ls %s*/*/*%s'%(rdata_dir,rdata_file)).read()\
+                       .rstrip('\n').split('\n')
+ldata_file   = os.popen('ls %s*/*/*%s'%(rdata_dir,ldata_file)).read()\
+                       .rstrip('\n').split('\n')
+lvl0_file    = file_fmt%(lvl0_dir,buoy_str,lvl0_file.split('.nc')[0],year)
+lvl1_file[0] = file_fmt%(lvl1_dir,buoy_str,lvl1_file[0].split('.nc')[0],year)
+lvl1_file[1] = file_fmt%(lvl1_dir,buoy_str,lvl1_file[1].split('.nc')[0],year)
 
 # Create output directories if inexistant
 [sh('mkdir -p %s 2>/dev/null'%d) for d in [lvl0_dir,lvl1_dir,lvl2_dir]]
@@ -138,10 +142,17 @@ DSogsl = pd.read_csv(odata_dir+odata_file,
                      skiprows=3)
 bwp    = np.array([p.rstrip(' ') for p in DSogsl['Parameter']])
 for key in bwp_sel:
-    n_std = 2 if key in ['Wave Period'] else 1
-    bwp_rmin.append(DSogsl['min'][np.where(bwp==key)[0][0]])
-    bwp_rmax.append(DSogsl['max'][np.where(bwp==key)[0][0]])
-    bwp_std.append(n_std*DSogsl['std'][np.where(bwp==key)[0][0]])
+    min_var = DSogsl['min'][np.where(bwp==key)[0][0]]
+    std_var = DSogsl['std'][np.where(bwp==key)[0][0]]
+    if key=='Wave Period':
+        n_std   = 2
+        max_var = max(DSogsl['max'][np.where(bwp==key)[0][0]],1/fcut)
+    else:
+        n_std   = 1
+        max_var = DSogsl['max'][np.where(bwp==key)[0][0]]
+    bwp_rmin.append(min_var)
+    bwp_rmax.append(max_var)
+    bwp_std.append(n_std*std_var)
 
 # LEVEL GLOBAL PARAMETERS
 lvl_d = {'Info':{'Id':buoy,
@@ -152,11 +163,11 @@ lvl_d = {'Info':{'Id':buoy,
                  'Aux_Record_Length':30*60,
                  'Wave_Regular_Length':30*60,
                  'Aux_Regular_Length':30*60},
-         'Input':{'Raw_File_List':rdata_file,
+         'Input':{'Loc_File_List':ldata_file,
+                  'Raw_File_List':rdata_file,
                   'Raw_Header_Rows':7},
          'Output':{'LVL0_File':lvl0_file,
-                   'LVL1_File':lvl1_file,
-                   'LVL2_File':lvl2_file},
+                   'LVL1_File':lvl1_file},
          'Physics_Parameters':{'Ref_Density':rho_0,
                                'Gravity':g,
                                'Water_Depth':H},
@@ -189,7 +200,7 @@ qfst_d = {'Test_9':{'Do_Test':True,
                      'lmax':freq_max,
                      'nbins':50},
           'Test_12':{'Do_Test':True,
-                     'm':int(np.ceil(2*fs/getFrequencies(2*pi/C0,H))),
+                     'm':int(np.ceil(2*fs/fcut)),
                      'delta':1.E-1},
           'Test_13':{'Do_Test':False,
                      'N':np.nan}}

@@ -33,6 +33,45 @@ def sh(s): os.system("bash -c '%s'"%s)
 
 ### "spot_utils" utilities
 # -------------------------------------------------- #
+def getSPOTLocFromFileList(f_list,hrows=7):
+    '''
+    Retrieve timestamp, longitude and latitude from a SPOT location file list.
+    '''
+
+    # Initialize outputs
+    ts,lon,lat = [[] for _ in range(3)]
+
+    # Open and read file
+    for f_name in f_list:
+        DS = array(pd.read_csv(f_name,
+                   delimiter=',',
+                   skipinitialspace=True,
+                   skiprows=hrows,
+                   header=None))
+
+        # Get year, mont, day, hour, minute, second, millisecond
+        Y   = [int(y) for y in DS[:,0]]
+        M   = [int(m) for m in DS[:,1]]
+        D   = [int(d) for d in DS[:,2]]
+        HH  = [int(hh) for hh in DS[:,3]]
+        MM  = [int(mm) for mm in DS[:,4]]
+        SS  = [int(ss) for ss in DS[:,5]]
+        MSS = [int(np.ceil(mss/100)*100) for mss in DS[:,6]]
+
+        # Calculate timestamps
+        tfrmt = '%d-%02g-%02gT%02g:%02g:%02g.%d'
+        tss   = [pd.Timestamp(tfrmt%(Y[i],M[i],D[i],HH[i],MM[i],SS[i],MSS[i]))\
+                            .timestamp()\
+                 for i in range(len(DS))]
+
+        # Append data
+        ts.append(tss)
+        lat.append(DS[:,7])
+        lon.append(DS[:,8])
+
+    return hstack(ts),hstack(lon),hstack(lat)
+
+# ---------- #
 def getSPOTTimeFromFile(f_name,hrows=7):
     '''
     Retrieve date from a SPOT displacement data file.
@@ -42,7 +81,8 @@ def getSPOTTimeFromFile(f_name,hrows=7):
     DS = array(pd.read_csv(f_name,
                            delimiter=',',
                            skipinitialspace=True,
-                           skiprows=hrows))
+                           skiprows=hrows,
+                           header=None))
 
     # Get year, mont, day, hour, minute, second, millisecond
     Y   = [int(y) for y in DS[:,0]]
@@ -172,7 +212,7 @@ def getDirMoments(CS,weight=False,Ef=None,fs=None):
     return a1,b1,a2,b2
 
 # ---------- #
-def getFrequencies(k,H,g=9.81):
+def getFrequency(k,H,g=9.81):
     '''
     Estimate a frequency using the linear dispersion relation for surface
     waves, for a single wavenumber "k".
@@ -285,7 +325,7 @@ def positiveCosAngle(arad):
 # ---------- #
 def writeLvl0(lvl_d,qfst_d):
     '''
-    Write level 0 of Spotter buoy.
+    Write level 0 (surface motions) of Spotter buoy.
     '''
 
     ## SET
@@ -297,10 +337,11 @@ def writeLvl0(lvl_d,qfst_d):
     wreg_dt   = lvl_d['Info']['Wave_Regular_Length']
     areg_dt   = lvl_d['Info']['Aux_Regular_Length']
     fs        = lvl_d['Info']['Sampling_Frequency']
+    loc_list  = lvl_d['Input']['Loc_File_List']
     file_list = lvl_d['Input']['Raw_File_List']
     hrows     = lvl_d['Input']['Raw_Header_Rows']
-    xyz_ci    = lvl_d['Wave_Monitor']['XYZ_Cartesian_Index']
     afac      = lvl_d['Wave_Monitor']['Amplitude_Factor']
+    xyz_ci    = lvl_d['Wave_Monitor']['XYZ_Cartesian_Index']
 
     # Calculate record length in time index
     irec_len = int(rec_len*fs)
@@ -317,12 +358,15 @@ def writeLvl0(lvl_d,qfst_d):
     # Truncate with begin and end dates
     cdb_ts    = pd.Timestamp(cdb).timestamp()
     cde_ts    = pd.Timestamp(cde).timestamp()
-    iraw_db   = where((raw_ts-cdb_ts)>0)[0][0]
-    iraw_de   = where((raw_ts-cde_ts)<0)[0][-1] + 1
-    ifile_db  = where((file_ts-cdb_ts)>0)[0][0]
-    ifile_de  = where((file_ts-cde_ts)<0)[0][-1] + 1
+    iraw_db   = where((raw_ts-cdb_ts)>=0)[0][0]
+    iraw_de   = where((raw_ts-cde_ts)<=0)[0][-1] + 1
+    ifile_db  = where((file_ts-cdb_ts)>=0)[0][0]
+    ifile_de  = where((file_ts-cde_ts)<=0)[0][-1] + 1
     raw_ts    = raw_ts[iraw_db:iraw_de]
     file_list = file_list[ifile_db:ifile_de]
+
+    # Get location information
+    loc_ts,lon,lat = getSPOTLocFromFileList(loc_list)
 
     # Compute regular timestamp and date
     reg_tsi  = np.floor(raw_ts[0]/wreg_dt)*wreg_dt
@@ -334,6 +378,7 @@ def writeLvl0(lvl_d,qfst_d):
     # Initialize outputs
     time_range = np.arange(irec_len)/fs
     data       = np.nan*np.ones((len(reg_ts),3,len(time_range)))
+    location   = np.nan*np.ones((len(reg_ts),2))
     dim        = len(reg_ts)
     nfiles     = len(file_list)
 
@@ -350,6 +395,7 @@ def writeLvl0(lvl_d,qfst_d):
         # Open displacement data
         DSo = array(pd.read_csv(file_list[i],
                                 delimiter=',',
+                                skipinitialspace=True,
                                 skiprows=hrows,
                                 header=None))
 
@@ -368,9 +414,18 @@ def writeLvl0(lvl_d,qfst_d):
             # Append displacement data and apply amplitude factor
             data[ireg_ts,:,irange_t] = afac*DSo[cnt,xyz_ci]
 
+    # Append location with nearest lon,lat values to 30-minutes regular series
+    for i in range(n_ts):
+        iloc_ts = abs(loc_ts-reg_ts[i]).argmin()
+        if abs(loc_ts[iloc_ts]-reg_ts[i])<wreg_dt:
+            location[i,0] = lon[iloc_ts]
+            location[i,1] = lat[iloc_ts]
+        else: continue
+
     ## QUALITY FLAGS
     # Retrieve 3D displacement from "data"
     xdata,ydata,zdata = data[:,0,:],data[:,1,:],data[:,2,:]
+    lon,lat           = location[:,0],location[:,1]
 
     # Compute quality flag
     xdata,qf_xdata = getSTQF(xdata,'"Displacement_X"',qfst_d)
@@ -380,22 +435,26 @@ def writeLvl0(lvl_d,qfst_d):
     ## OUTPUTS
     # Variables attributes
     xdisp_attrs = {'Description':'Eastward displacement of the platform '\
-                                +'measured from the onboard GPS.',
+                                +'measured with GPS-based method',
                    'Units':'Meter'}
     ydisp_attrs = {'Description':'Northward displacement of the platform '\
-                                +'measured from the onboard GPS.',
+                                +'measured with GPS-based method',
                    'Units':'Meter'}
     zdisp_attrs = {'Description':'Upward displacement of the platform '\
-                                +'measured from the onboard GPS.',
+                                +'measured with GPS-based method',
                    'Units':'Meter'}
+    lon_attrs   = {'Description':'Longitude of the buoy',
+                   'Units':'Decimal degree North'}
+    lat_attrs   = {'Description':'Latitude of the buoy',
+                   'Units':'Decimal degree West'}
 
     # Quality flag attributes
-    qf_xdisp_attrs = {'Description':'Primary and secondary quality flag for '\
-                                   +'"Displacement_X" variable'}
-    qf_ydisp_attrs = {'Description':'Primary and secondary quality flag for '\
-                                   +'"Displacement_Y" variable'}
-    qf_zdisp_attrs = {'Description':'Primary and secondary quality flag for '\
-                                   +'"Displacement_Z" variable'}
+    qf_xdisp_attrs = {'Description':'Quality flag for variable '\
+                                   +'"Displacement_X"'}
+    qf_ydisp_attrs = {'Description':'Quality flag for variable '\
+                                   +'"Displacement_Y"'}
+    qf_zdisp_attrs = {'Description':'Quality flag for variable '\
+                                   +'"Displacement_Z"'}
 
     # "xarray" data output
     Dim1         = ['Time']
@@ -405,6 +464,8 @@ def writeLvl0(lvl_d,qfst_d):
     xdisp_out    = xr.DataArray(xdata,dims=Dim2,coords=Crd2,attrs=xdisp_attrs)
     ydisp_out    = xr.DataArray(ydata,dims=Dim2,coords=Crd2,attrs=ydisp_attrs)
     zdisp_out    = xr.DataArray(zdata,dims=Dim2,coords=Crd2,attrs=zdisp_attrs)
+    lon_out      = xr.DataArray(lon,dims=Dim1,coords=Crd1,attrs=lon_attrs)
+    lat_out      = xr.DataArray(lat,dims=Dim1,coords=Crd1,attrs=lat_attrs)
     qf_xdisp_out = xr.DataArray(qf_xdata,
                                 dims=Dim1,coords=Crd1,attrs=qf_xdisp_attrs)
     qf_ydisp_out = xr.DataArray(qf_ydata,
@@ -413,7 +474,9 @@ def writeLvl0(lvl_d,qfst_d):
                                 dims=Dim1,coords=Crd1,attrs=qf_zdisp_attrs)
 
     # Create output dataset
-    DSout = xr.Dataset({'Displacement_X':xdisp_out,
+    DSout = xr.Dataset({'Longitude':lon_out,
+                        'Latitude':lat_out,
+                        'Displacement_X':xdisp_out,
                         'Displacement_Y':ydisp_out,
                         'Displacement_Z':zdisp_out,
                         'Displacement_X_QF':qf_xdisp_out,
@@ -421,28 +484,23 @@ def writeLvl0(lvl_d,qfst_d):
                         'Displacement_Z_QF':qf_zdisp_out})
 
     # Auxiliary variables
-    DSout['Id']         = lvl_d['Info']['Id']
-    DSout['Date_Begin'] = lvl_d['Info']['Corrected_Date_Begin']
-    DSout['Date_End']   = lvl_d['Info']['Corrected_Date_End']
-    DSout['Fs']         = lvl_d['Info']['Sampling_Frequency']
+    DSout['Id']          = lvl_d['Info']['Id']
+    DSout['Fs']          = lvl_d['Info']['Sampling_Frequency']
+    DSout['Water_Depth'] = lvl_d['Physics_Parameters']['Water_Depth']
 
     # Auxiliary attributes
-    DSout.Id.attrs         = {'Description':'Buoy ID'}
-    DSout.Date_Begin.attrs = {'Description':'Start timestamp of wave '\
-                                           +'monitoring',
-                              'Units':'Timestamp'}
-    DSout.Date_End.attrs   = {'Description':'Stop timestamp of wave '\
-                                           +'monitoring',
-                              'Units':'Timestamp'}
-    DSout.Fs.attrs         = {'Description':'Sampling frequency of surface '\
-                                           +'motions',
-                              'Units':'Hertz'}
-    DSout.Time.attrs       = {'Description':'Start timestamp of 30-minutes '\
-                                           +'records',
-                              'Units':'Timestamp'}
-    DSout.Time_Range.attrs = {'Description':'Time range of regularly sampled '\
-                                           +'30-minutes records',
-                              'Units':'Second'}
+    DSout.Id.attrs          = {'Description':'Buoy ID'}
+    DSout.Fs.attrs          = {'Description':'Sampling frequency of surface '\
+                                            +'motions',
+                               'Units':'Hertz'}
+    DSout.Water_Depth.attrs = {'Description':'Water column depth',
+                               'Units':'Meter'}
+    DSout.Time.attrs        = {'Description':'Start timestamp of 30-minutes '\
+                                            +'records',
+                               'Units':'Timestamp'}
+    DSout.Time_Range.attrs  = {'Description':'Time range of regularly '\
+                                            +'sampled 30-minutes records',
+                               'Units':'Second'}
 
     # Write NetCDF
     sh('rm %s'%lvl_d['Output']['LVL0_File'])
@@ -451,7 +509,7 @@ def writeLvl0(lvl_d,qfst_d):
 # ---------- #
 def writeLvl1(lvl_d,qflt_d):
     '''
-    Write level 1 of Spotter buoy.
+    Write level 1 (wave) of Spotter buoy.
     '''
 
     # Unpack 'lvl_d'
@@ -466,11 +524,16 @@ def writeLvl1(lvl_d,qflt_d):
     freq_max  = lvl_d['Wave_Monitor']['Freq_Min']
     filt_bool = lvl_d['Filtering']['Filter']
     f_type    = lvl_d['Filtering']['F_Type']
-    fcut      = lvl_d['Filtering']['C0']
+    d_type    = lvl_d['Filtering']['D_Type']
 
     # Retrieve filtering information
+    if d_type=='length':
+        wcut = 2*pi/lvl_d['Filtering']['C0']
+        fcut = getFrequency(wcut,H)
+    elif d_type=='freq':
+        fcut = lvl_d['Filtering']['C0']
+        wcut = getWavenumber(fcut,H)
     if filt_bool:
-        wcut  = getWavenumber(fcut,H)
         fpass = 'high pass' if f_type=='hp' else\
                 'low pass'  if f_type=='lp' else\
                 ''
@@ -499,21 +562,21 @@ def writeLvl1(lvl_d,qflt_d):
     dim       = len(lvl0_date)
 
     # Initialize outputs
-    sxx,qf_sxx               = [[] for _ in range(2)]
-    syy,qf_syy               = [[] for _ in range(2)]
-    szz,qf_szz               = [[] for _ in range(2)]
-    cxy,qf_cxy               = [[] for _ in range(2)]
-    qxz,qf_qxz               = [[] for _ in range(2)]
-    qyz,qf_qyz               = [[] for _ in range(2)]
-    a1,qf_a1                 = [[] for _ in range(2)]
-    b1,qf_b1                 = [[] for _ in range(2)]
-    a2,qf_a2                 = [[] for _ in range(2)]
-    b2,qf_b2                 = [[] for _ in range(2)]
-    freq_peak,qf_freq_peak   = [[] for _ in range(2)]
-    wnum_peak,qf_wnum_peak   = [[] for _ in range(2)]
-    hm0,tmn10,tm01,tm02      = [[] for _ in range(4)]
-    theta_mean,theta_peak    = [[] for _ in range(2)]
-    sigma_mean,sigma_peak    = [[] for _ in range(2)]
+    sxx,qf_sxx             = [[] for _ in range(2)]
+    syy,qf_syy             = [[] for _ in range(2)]
+    szz,qf_szz             = [[] for _ in range(2)]
+    cxy,qf_cxy             = [[] for _ in range(2)]
+    qxz,qf_qxz             = [[] for _ in range(2)]
+    qyz,qf_qyz             = [[] for _ in range(2)]
+    a1,qf_a1               = [[] for _ in range(2)]
+    b1,qf_b1               = [[] for _ in range(2)]
+    a2,qf_a2               = [[] for _ in range(2)]
+    b2,qf_b2               = [[] for _ in range(2)]
+    freq_peak,qf_freq_peak = [[] for _ in range(2)]
+    wnum_peak,qf_wnum_peak = [[] for _ in range(2)]
+    hm0,tmn10,tm01,tm02    = [[] for _ in range(4)]
+    theta_mean,theta_peak  = [[] for _ in range(2)]
+    sigma_mean,sigma_peak  = [[] for _ in range(2)]
 
     ## PARSE LEVEL 1
     # Iterate over "lvl0" data
@@ -604,7 +667,7 @@ def writeLvl1(lvl_d,qflt_d):
         qf_wnum_peak.append(qf_z[i])
 
         ## BULK WAVE VARIABLES
-        # Compute first and second frequency moments
+        # Compute -1,0,1,2 frequency moments
         mn1 = getFreqMoment(Ef,freq,-1)
         m0  = getFreqMoment(Ef,freq,0)
         m1  = getFreqMoment(Ef,freq,1)
@@ -630,16 +693,16 @@ def writeLvl1(lvl_d,qflt_d):
         sm = (2*(1-(A1_mean**2+B1_mean**2)**(1/2)))**(1/2)
 
         # Append bulk wave variables
-        hm0.append(4*m0**(1/2))             # significant wave height
-        tmn10.append(mn1/m0)                # energy wave period
-        tm01.append(m0/m1)                  # mean wave period
-        tm02.append(np.sqrt(m0/m2))         # absolute mean wave period
-        freq_peak.append(fp)                # peak frequency
-        wnum_peak.append(wp)                # peak wavenumber
-        theta_mean.append(180/pi*tm)        # mean direction
-        theta_peak.append(180/pi*tp)        # peak direction
-        sigma_mean.append(180/pi*sm)        # mean directional spreading
-        sigma_peak.append(180/pi*sp)        # peak directional spreading
+        hm0.append(4*m0**(1/2))                 # significant wave height
+        tmn10.append(mn1/m0)                    # energy wave period
+        tm01.append(m0/m1)                      # mean wave period
+        tm02.append(np.sqrt(m0/m2))             # absolute mean wave period
+        freq_peak.append(fp)                    # peak frequency
+        wnum_peak.append(wp)                    # peak wavenumber
+        theta_mean.append(180/pi*tm)            # mean direction
+        theta_peak.append(180/pi*tp)            # peak direction
+        sigma_mean.append(180/pi*sm)            # mean directional spreading
+        sigma_peak.append(180/pi*sp)            # peak directional spreading
 
     ## QUALITY FLAGS FOR BULK PARAMETERS
     # Update "qflt_d" for tests 14 and 17
@@ -656,7 +719,7 @@ def writeLvl1(lvl_d,qflt_d):
     hm0,qf_hm0,qflt_d = getLTQF(hm0,qf_z,'Hm0',qflt_d)
 
     # Compute quality flags for other wave bulk parameters
-    tmn10,qf_tmn10,_           = getLTQF(tmn10,qf_z,'Tmn10',qflt_d)
+    tmn10,qf_tmn10,_           = getLTQF(tmn10,qf_z,'Tm-10',qflt_d)
     tm01,qf_tm01,_             = getLTQF(tm01,qf_z,'Tm01',qflt_d)
     tm02,qf_tm02,_             = getLTQF(tm02,qf_z,'Tm02',qflt_d)
     theta_mean,qf_theta_mean,_ = getLTQF(theta_mean,qf_a1,'Theta_Mean',qflt_d)
@@ -684,26 +747,26 @@ def writeLvl1(lvl_d,qflt_d):
     b2_attrs  = {'Description':'"b2" directional moment','Units':'None'}
 
     # Spectral variables quality flag attributes
-    qf_sxx_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Sxx" cross-spectral density'}
-    qf_syy_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Syy" cross-spectral density'}
-    qf_szz_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Szz" cross-spectral density'}
-    qf_cxy_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Cxy" cross-spectral density'}
-    qf_qxz_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Qxz" cross-spectral density'}
-    qf_qyz_attrs = {'Description':'Primary and secondary quality flag for '+\
-                    '"Qyz" cross-spectral density'}
-    qf_a1_attrs = {'Description':'Primary and secondary quality flag for '+\
-                   '"A1" directional moment'}
-    qf_b1_attrs = {'Description':'Primary and secondary quality flag for '+\
-                   '"B1" directional moment'}
-    qf_a2_attrs = {'Description':'Primary and secondary quality flag for '+\
-                   '"A2" directional moment'}
-    qf_b2_attrs = {'Description':'Primary and secondary quality flag for '+\
-                   '"B2" directional moment'}
+    qf_sxx_attrs = {'Description':'Quality flag for variable '+\
+                    '"Sxx"'}
+    qf_syy_attrs = {'Description':'Quality flag for variable '+\
+                    '"Syy"'}
+    qf_szz_attrs = {'Description':'Quality flag for variable '+\
+                    '"Szz"'}
+    qf_cxy_attrs = {'Description':'Quality flag for variable '+\
+                    '"Cxy"'}
+    qf_qxz_attrs = {'Description':'Quality flag for variable '+\
+                    '"Qxz"'}
+    qf_qyz_attrs = {'Description':'Quality flag for variable '+\
+                    '"Qyz"'}
+    qf_a1_attrs  = {'Description':'Quality flag for variable '+\
+                    '"A1"'}
+    qf_b1_attrs  = {'Description':'Quality flag for variable '+\
+                    '"B1"'}
+    qf_a2_attrs  = {'Description':'Quality flag for variable '+\
+                    '"A2"'}
+    qf_b2_attrs  = {'Description':'Quality flag for variable '+\
+                    '"B2"'}
 
     # "xarray" data output for spectral variables
     Dim1       = ['Time']
@@ -755,21 +818,28 @@ def writeLvl1(lvl_d,qflt_d):
 
     # Auxiliary variables
     DSout['Id']                = lvl_d['Info']['Id']
-    DSout['Date_Begin']        = lvl_d['Info']['Corrected_Date_Begin']
-    DSout['Date_End']          = lvl_d['Info']['Corrected_Date_End']
+    DSout['Fs']                = fs
+    DSout['Water_Depth']       = H
     DSout['Wavenumber']        = wnum
     DSout['Cutoff_Frequency']  = fcut
     DSout['Cutoff_Wavenumber'] = wcut
-    DSout['Water_Depth']       = H
 
     # Auxiliary attributes
     DSout.Id.attrs                = {'Description':'Buoy ID'}
-    DSout.Date_Begin.attrs        = {'Description':'Start timestamp of wave '\
-                                                  +'monitoring',
-                                     'Units':'Timestamp'}
-    DSout.Date_End.attrs          = {'Description':'Stop timestamp of wave '\
-                                                  +'monitoring',
-                                     'Units':'Timestamp'}
+    DSout.Fs.attrs                = {'Description':'Sampling frequency of '\
+                                                  +'surface motions',
+                                     'Units':'Hertz'}
+
+    DSout.Water_Depth.attrs       = {'Description':'Water column depth',
+                                     'Units':'Meter'}
+    DSout.Cutoff_Frequency.attrs  = {'Description':'Cutoff frequency for '\
+                                                  +'%s filtering of '%fpass\
+                                                  +'cross-spectral densities',
+                                     'Units':'Hertz'}
+    DSout.Cutoff_Wavenumber.attrs = {'Description':'Cutoff wavenumber for '\
+                                                  +'%s filtering of '%fpass\
+                                                  +'cross-spectral densities',
+                                     'Units':'Radian per meter'}
     DSout.Time.attrs              = {'Description':'Start timestamp of '\
                                                   +'spectral variable '\
                                                   +'provided every 30 minutes',
@@ -781,20 +851,11 @@ def writeLvl1(lvl_d,qflt_d):
                                                   +'dispersion relation for '\
                                                   +'surface gravity waves',
                                      'Units':'Radian per meter'}
-    DSout.Cutoff_Frequency.attrs  = {'Description':'Cutoff frequency for '\
-                                                  +'%s filtering of '%fpass\
-                                                  +'cross-spectral densities',
-                                     'Units':'Hertz'}
-    DSout.Cutoff_Wavenumber.attrs = {'Description':'Cutoff wavenumber for '\
-                                                  +'%s filtering of '%fpass\
-                                                  +'cross-spectral densities',
-                                     'Units':'Radian per meter'}
-    DSout.Water_Depth.attrs       = {'Description':'Water column depth ',
-                                     'Units':'Meter'}
+
 
     # Write NetCDF for spectral variables
-    sh('rm %s'%lvl_d['Output']['LVL1_File'])
-    DSout.to_netcdf(lvl_d['Output']['LVL1_File'],engine='netcdf4')
+    sh('rm %s'%lvl_d['Output']['LVL1_File'][0])
+    DSout.to_netcdf(lvl_d['Output']['LVL1_File'][0],engine='netcdf4')
 
     # Bulk wave variables attributes
     hm0_attrs        = {'Description':'Significant wave height',
@@ -819,26 +880,26 @@ def writeLvl1(lvl_d,qflt_d):
                         'Units':'Degree'}
 
     # Bulk wave variables quality flag attributes
-    qf_hm0_attrs        = {'Description':'Primary and secondary quality '+\
-                           'flag for "Hm0" variable'}
-    qf_tmn10_attrs      = {'Description':'Primary and secondary quality '+\
-                           'flag for "Tm-10" variable'}
-    qf_tm01_attrs       = {'Description':'Primary and secondary quality '+\
-                           'flag for "Tm01" variable'}
-    qf_tm02_attrs       = {'Description':'Primary and secondary quality '+\
-                           'flag for "Tm02" variable'}
-    qf_freq_peak_attrs  = {'Description':'Primary and secondary quality '+\
-                           'flag for "Freq_Peak" variable'}
-    qf_wnum_peak_attrs  = {'Description':'Primary and secondary quality '+\
-                           'flag for "Wnum_Peak" variable'}
-    qf_theta_mean_attrs = {'Description':'Primary and secondary quality '+\
-                           'flag for "Theta_Mean" variable'}
-    qf_theta_peak_attrs = {'Description':'Primary and secondary quality '+\
-                           'flag for "Theta_Peak" variable'}
-    qf_sigma_mean_attrs = {'Description':'Primary and secondary quality '+\
-                           'flag for "Sigma_Mean" variable'}
-    qf_sigma_peak_attrs = {'Description':'Primary and secondary quality '+\
-                           'flag for "Sigma_Peak" variable'}
+    qf_hm0_attrs        = {'Description':'Quality flag for variable '+\
+                           '"Hm0"'}
+    qf_tmn10_attrs      = {'Description':'Quality flag for variable '+\
+                           '"Tm-10"'}
+    qf_tm01_attrs       = {'Description':'Quality flag for variable '+\
+                           '"Tm01"'}
+    qf_tm02_attrs       = {'Description':'Quality flag for variable '+\
+                           '"Tm02"'}
+    qf_freq_peak_attrs  = {'Description':'Quality flag for variable '+\
+                           '"Freq_Peak"'}
+    qf_wnum_peak_attrs  = {'Description':'Quality flag for variable '+\
+                           '"Wnum_Peak"'}
+    qf_theta_mean_attrs = {'Description':'Quality flag for variable '+\
+                           '"Theta_Mean"'}
+    qf_theta_peak_attrs = {'Description':'Quality flag for variable '+\
+                           '"Theta_Peak"'}
+    qf_sigma_mean_attrs = {'Description':'Quality flag for variable '+\
+                           '"Sigma_Mean"'}
+    qf_sigma_peak_attrs = {'Description':'Quality flag for variable '+\
+                           '"Sigma_Peak"'}
 
     # "xarray" data output for bulk wave variables
     Dim               = ['Time']
@@ -913,7 +974,7 @@ def writeLvl1(lvl_d,qflt_d):
                         'Sigma_Peak_QF':qf_sigma_peak_out})
 
     # Write NetCDF for bulk wave variables
-    sh('rm %s'%lvl_d['Output']['LVL2_File'])
-    DSout.to_netcdf(lvl_d['Output']['LVL2_File'],engine='netcdf4')
+    sh('rm %s'%lvl_d['Output']['LVL1_File'][1])
+    DSout.to_netcdf(lvl_d['Output']['LVL1_File'][1],engine='netcdf4')
 
 # END
