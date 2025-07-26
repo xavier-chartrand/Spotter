@@ -2,51 +2,53 @@
 # Author: Xavier Chartrand
 # Email : x.chartrand@protonmail.me
 #         xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@uqar.ca
 
 '''
 Quality flag utilities based on "Manual for Real-Time Quality Control of
-In-Situ Surface Wave Data", verson 2.1, February 2019.
+In-Situ Surface Wave Data", verson 2.1, February 2019 (Bushnell 2019).
 
 Overview of quality flags:
-
 1) Pass             Data have passed critical real-time QC tests and are
-                    deemed adequate for use as preliminary data;
+                    deemed adequate for use as preliminary data ;
 
-2) Not evaluated    Data have not been QC-tested, or the information on
-                    quality is not available;
+2) Not evaluated    Data have not been tested for quality, or the
+                    information on quality is not available ;
 
 3) Suspect or of    Data are considered to be either suspect or of high
-   high interest    interest to operators and users. They are flagged suspect
-                    to draw further attention to them by operators;
+   high interest    interest to operators and users.
+                    They are flagged suspect to draw further attention to
+                    them by operators ;
 
 4) Fail             Data are considered to have failed one or more critical
-                    real-time QC checks. If they are disseminated at all, it
-                    should be readily apparent that they are not of
-                    acceptable quality;
+                    real-time quality control checks. If they are
+                    disseminated at all, it should be readily apparent
+                    that they are not of acceptable quality ;
 
-9) Missing data     Data are missing (used as a placeholder).
+9) Missing data     Data are missing ("NaN" used as a placeholder).
 '''
 
 # Module
 import numpy as np
-import pandas as pd
 import sys
-import time
+import contextlib
+
 # Functions
 from csaps import CubicSmoothingSpline as CSS
-from numpy import array,isnan,invert,hstack,transpose,where
+from numpy import array,copy,diff,isnan,invert,hstack,mean,median,nan,nanmean,\
+                  nanmin,nanstd,ones,shape,sqrt,std,tanh,transpose,unique,\
+                  where,zeros
 from scipy.special import erfcinv
 from scipy.stats import median_abs_deviation as mad
-# Constants
-from scipy.constants import pi
 
 ## Short-term test functions
-# ---------- #
-def test9(st,N):
+# ----------
+def test9(st,*args):
     '''
-    Short-term time series gap.
+    Short-term time series gaps.
 
-    "N"         is the number of consecutive points allowed to be missed.
+    "args" must comprise:
+    "N"         the number of consecutive points allowed to be missed.
 
     Status: Strongly Recommended
     '''
@@ -54,132 +56,119 @@ def test9(st,N):
     # Quit if all "NaN", return "st" and 9 (missing data)
     if len(where(isnan(st))[0])==len(st): return st,9
 
-    # Get "st" dimension
+    # Unpack "args" and get "st" dimensions
+    N   = tuple(args)
     dim = len(st)
 
     # Check for data gap with "NaN" index
     ibad = where(isnan(st))[0]
-    if len(ibad)==0: return st,1                # 1 (good) no gap
+    if len(ibad)==0: return st,1                # (1) good, no gap
     else:                                       # check for gaps
-        idiff,j = np.diff(ibad),0
+        idiff,j = diff(ibad),0
         for i in range(len(idiff)):
             i,j = j if j else i,0
             while idiff[i+j]==1 and j<len(idiff):
                 if j<N-1: j+= 1
-                else: return st,4               # 4 (fail) at least "N" gap
+                else: return st,4               # (4) fail, at least one gap
+                                                # of "N" points
 
     # Spline gaps if any
     x      = array(range(len(st)))
     igood  = where(invert(isnan(st)))[0]
     css_st = CSS(x[igood],st[igood],smooth=1)
 
-    # Return splined short-term time series and 1 (good)
+    # Return splined short-term time series and QF=1
     return css_st.spline(x=x),1
 
-# ---------- #
-def test10_quartod(st,N,m,p=2,thrs=0.1):
+# ----------
+def test10(st,*args):
     '''
-    Short-term time series spike (original test).
+    Short-term time series spike.
 
-    "N"         is the multiple of standard deviation that is not allowed to
-                be exceeded ;
-    "m"         is the number of points of the segment centered on "x[i]"
-                that is used to replace spikes with the segment average around
-                "x[i]" (x[i] is excluded from the mean calculation) ;
-    "p"         is the number of times the test is rerun ;
-    "thrs"      is the fraction of the number of spikes or outliers over the
-                total series length that is not allowed to be exceeded.
+    "args" must comprise:
+    "N"         the multiple of standard deviation that is not allowed to be
+                exceeded ;
+    "m"         the number of points of the segment centered on "x[i]" that is
+                used to replace spikes with the segment average around "x[i]"\
+                ("x[i]" is excluded from the mean calculation) ;
+    "p"         the number of times the test is repeated ;
+    "thrs"      the fraction of the number of spikes or outliers over the total
+                series length that is not allowed to be exceeded.
 
     Status: Strongly Recommended
     '''
 
-    # Get "st" dimensions
-    dim = len(st)
+    # Unpack "args" and get "st" dimensions
+    N,m,p,thrs = tuple(args)
+    dim        = len(st)
 
     # Quit if all "NaN", return "st" and 9 (missing data)
     if len(where(isnan(st))[0])==dim: return st,9
 
     # Get outliers more than "N" standard deviation
     cnt   = 0
-    mst_p = np.copy(st)
-    ibad  = where(abs(st-np.nanmean(st))>=N*np.nanstd(st))[0]
+    mst_p = copy(st)
+    ibad  = where(abs(st-nanmean(st))>=N*nanstd(st))[0]
 
     # Check outliers criterion
     for _ in range(p):
-        if    len(ibad)>=thrs*dim: return st,4  # 4 (fail) too many outliers
-        elif  len(ibad)==0:        return st,1  # 1 (good) no outliers
+        if    len(ibad)>=thrs*dim: return st,4  # (4), too many outliers
+        elif  len(ibad)==0:        return st,1  # (1), no outliers
         else: mst = movMean(mst_p,m,index_list=ibad,remove_i=True)
 
         # Check if values are "NaN"
         if len(where(isnan(mst))[0])==dim: return st,9
 
         # Update spike indices
-        ibad  = where(abs(mst-np.nanmean(mst))>N*np.nanstd(mst))[0]
-        mst_p = np.copy(mst)
+        ibad  = where(abs(mst-nanmean(mst))>N*nanstd(mst))[0]
+        mst_p = copy(mst)
 
-    # Return 4 (failed test) if too many outliers after "P" iterations, else 1
+    # Return failed test (4) if too many outliers remains after "p"
+    # iterations, else good (1)
     if len(ibad): return st,4
     else:         return mst,1
 
-# ---------- #
-def test10(st,N,thrs=0.01,spline=False):
-    '''
-    Short-term time series spikes (modified). If the short-term time-series
-    presents at least 1% of outliers, the series is flagged suspect.
-
-    "N"         is the multiple of standard deviation that is not allowed to
-                be exceeded ;
-    "thrs"      is the fraction of the number of spikes or outliers over the
-                total series length that is not allowed to be exceeded.
-
-    Status: Strongly Recommended
-    '''
-
-    # Get "st" dimensions
-    dim = len(st)
-
-    # Quit if all "NaN", return "st" and 9 (missing data)
-    if len(where(isnan(st))[0])==dim: return st,9
-
-    # Get outliers more than "N" standard deviation
-    cnt   = 0
-    mst_p = np.copy(st)
-    ibad  = where(abs(st-np.nanmean(st))>=N*np.nanstd(st))[0]
-    if len(ibad)>=thrs*len(st): return st,3
-    else:                       return st,1
-
-# ---------- #
-def test11(st,imin,imax,lmin,lmax,nbins):
+# ----------
+def test11(st,*args):
     '''
     Short-term time series range.
 
-    "imin"      is the instrument minimum ;
-    "imax"      is the instrument maximum ;
-    "lmin"      is the regional/seasonal/climate/sensor-dependant minimum ;
-    "lmax"      is the regional/seasonal/climate/sensor-dependant maximum ;
-    "nbins"     is the minimal number of unique values required (no binning).
+    "args" must comprise:
+    "imin"      the instrument minimum ;
+    "imax"      the instrument maximum ;
+    "lmin"      the regional/seasonal/climate/sensor-dependant minimum ;
+    "lmax"      the regional/seasonal/climate/sensor-dependant maximum.
 
     Status: Strongly Recommended
     '''
 
-    # Quit if all "NaN" or data are binned, return 9 (missing data)
-    if len(where(isnan(st))[0])==len(st) or len(np.unique(st))<nbins: return 9
+    # Unpack "args"
+    imin,imax,lmin,lmax = tuple(args)
+
+    # Quit if all "NaN", return 9 (missing data)
+    if len(where(isnan(st))[0])==len(st): return st,9
 
     # Check if values are in a valid range
-    if   any((st<imin)*(st>imax)): return 4     # 4 (fail) out "i" range
-    elif any((st<lmin)*(st>lmax)): return 3     # 3 (suspect) out "l" range
-    else:                          return 1     # 1 (good) in range
+    bexp_i = (min(st)<imin)*(max(st)>imax)
+    bexp_l = (min(st)<lmin)*(max(st)>lmax)
+    if   bexp_i: return st,4                    # (4), out of "i" range
+    elif bexp_l: return st,3                    # (3), out of "l" range
+    else:        return st,1                    # (1), in range
 
-# ---------- #
-def test12(st,m,delta):
+# ----------
+def test12(st,*args):
     '''
     Short-term time series segment shift.
 
-    "m"         is the length of each segment ;
-    "delta"     is the mean shift allowed.
+    "args" must comprise:
+    "m"         the length of each segment ;
+    "delta"     the mean shift allowed.
 
     Status: Suggested
     '''
+
+    # Unpack "args"
+    m,delta = tuple(args)
 
     # Quit if all "NaN", return 9 (missing data)
     if len(where(isnan(st))[0])==len(st): return 9
@@ -187,21 +176,26 @@ def test12(st,m,delta):
     # Compute moving mean over the window "m"
     mst = movMean(st,m,index_list=range(len(st)))
 
-    # Check for segment shift
-    bexp = np.diff(mst)>delta
-    if any(bexp): return 4                      # 4 (fail) segment-shifted
-    else:         return 1                      # 1 (good) not segment-shifted
+    # Check if flattened values by the rolling mean vary more than "delta"
+    # around its average
+    bexp = std(mst)>=delta
+    if bexp: return 4                           # (4), mean shift
+    else:    return 1                           # (1), no mean shift
 
-# ---------- #
-def test13(st,N,g=9.81):
+# ----------
+def test13(st,*args,g=9.81):
     '''
     Short-term time series acceleration.
 
-    "N"         is the fraction of the gravitational acceleration that should
-                not be exceeded.
+    "args" must comprise:
+    "N"         the fraction of the gravitational acceleration that should not
+                be exceeded.
 
     Status: Strongly Recommended
     '''
+
+    # Unpack "args"
+    N = tuple(args)
 
     # Quit if all "NaN", return 9 (missing data)
     if len(where(isnan(st))[0])==len(st): return 9
@@ -210,490 +204,406 @@ def test13(st,N,g=9.81):
     ibad = where(st>N*g)
 
     # Check for bad values
-    if len(ibad): return 3                      # 3 (suspect) large values
-    else:         return 1                      # 1 (good) small values
+    if len(ibad): return 3                      # (3), too large values
+    else:         return 1                      # (1), not too large values
+
+# ----------
+def testNH(st,*args):
+    '''
+    Addition for: Short-term time series.
+
+    "args" must comprise:
+    "hcheck"    a flag indicating if heading have been available for correcting
+                horizontal acceleration.
+    '''
+
+    # Unpack "args"
+    hcheck = tuple(args)
+
+    # Return quality flag
+    return [4 if h else 1 for h in hcheck]
 
 ## Long-Terms
-# ---------- #
-def test14(wnum,freq,H,CS,fval,bwidth):
+# ----------
+# For each LT tests, the variable "lt" is defined as "lt=[bwp,sxx,syy,szz]"
+# where "bwp" is a bulk wave parameter to be tested, and "sxx,syy,szz" are
+# cross-spectral densities. For some tests, either all or some of these
+# variables are necessary, but this choice of nomenclature uniformize
+# the Python's processing routine.
+#
+# ----------
+def test14(lt,*args):
     '''
     Long-term time series check ratio or check factor.
 
     The check ratio or check factor "R(f)" is a function of frequency and
     depth and should theoretically be 1 for relatively deep water waves.
-    This function is validated for small frequency bands centered on "fval"
-    and of width of "bwidth", that should correspond to physically
-    intepretable frequency ranges (e.g. peak period, mean period, etc).
+    This function is validated for small frequency bands centered on "fv" and
+    of width of "bw", that should correspond to physically intepretable
+    frequency ranges (e.g. peak period, mean period, etc).
 
-    "wnum"      are wavenumber bins resolved ;
-    "freq"      are frequency bins resolved ;
-    "H"         is the water depth ;
-    "CS"        are the "XX","YY" and "ZZ" cross-spectral density ;
-    "fval"      is an array of frequencies to validate ;
-    "bwidth"    is the half-width of the band centered on "fval".
+    "args" must comprise:
+    "wnum"      wavenumber bins resolved ;
+    "freq"      frequency bins resolved ;
+    "H"         the water depth ;
+    "fv"        a frequency to validate ;
+    "bw"        the half-width of the band centered on "fval".
 
     Status: Strongly Recommended
     '''
 
-    # Unpack "CS"
-    sxx,syy,szz = CS[:,0],CS[:,1],CS[:,2]
+    # Unpack "lt"
+    _,sxx,syy,szz = [l for l in lt]
+
+    # Unpack "args"
+    wnum,freq,H,fv,bw = tuple(args)
+
+    # Initialize outputs
+    dim  = len(fv)
+    qf14 = 3*ones(dim)
+
+    # Get frequency index to
+    iwn = [where((freq>=fv[i]*(1-bw))*(freq<=fv[i]*(1+bw)))[0]\
+           for i in range(dim)]
 
     # Compute check factor in frequency bands to validate
-    R = []
-    for fv in fval:
-        i = np.where((freq>fv*(1-bwidth))*(freq<fv*(1+bwidth)))[0]
-        R.append(np.mean(np.sqrt(szz[i]/(sxx[i]+syy[i]))/np.tanh(H*wnum[i])))
+    imiss = []
+    R     = zeros(len(fv))
+    j     = 0
+    for i in iwn:
+        if len(i):
+            j+= 1
+            R+= mean(sqrt(szz[:,i]/(sxx[:,i]+syy[:,i]))/tanh(H*wnum[i]),axis=1)
+        else:
+            imiss.append(i)
 
-    # Check for values greater than 1.1 or lesser than 0.9
-    R    = np.array(R)
-    bexp = len(where(R<0.9)[0])+len(where(R>1.1)[0])
+    # get "R" mean
+    R = copy(R/j)
+
+    # Update test results for good (1) ratios
+    qf14[where((R>=0.9)*(R<=1.1))[0]] = 1
+
+    # Flag missing "NaN" values (9)
+    qf14[imiss] = nan
 
     # Return quality flag
-    if bexp: return 3                           # 3 (suspect) check ratio
-    else:    return 1                           # 1 (good) check ratio
+    return qf14
 
 # ---------- #
-def test15(lt,N):
+def test15(lt,*args):
     '''
     Long-term time series mean and standard deviation.
 
-    Check for values in "lt" outside a statistically valid range of "N" times
-    the standard deviation around mean.
+    Check for values of "bwp" outside a statistically valid range of "N" times
+    the standard deviation around the mean.
 
-    "N"         is the number of standard deviation considered for a good
+    "args" must comprise:
+    "N"         the number of standard deviation considered for a good
                 statistical range around the mean.
 
     Status: Strongly Recommended
     '''
 
-    # Get "lt" dimensions
-    dim = len(lt)
+    # Unpack "lt"
+    bwp,_,_,_ = [l for l in lt]
+
+    # Unpack "args"
+    N = tuple(args)
 
     # Initialize outputs
-    qf15 = 3*np.ones(dim)
+    qf15 = 3*ones(len(bwp))
 
     # Compute statistical limits
-    lower_lim = np.nanmean(lt) - N*np.nanstd(lt)
-    upper_lim = np.nanmean(lt) + N*np.nanstd(lt)
-    igood     = where((lt>=lower_lim)*(lt<=upper_lim))[0]
-    ibad      = where(np.invert((lt>=lower_lim)*(lt<=upper_lim)))[0]
+    lower_lim = nanmean(bwp) - N*array(nanstd(bwp))
+    upper_lim = nanmean(bwp) + N*array(nanstd(bwp))
+    igood     = where((bwp>=lower_lim)*(bwp<=upper_lim))[0]
+    inan      = where(isnan(bwp))[0]
 
     # Append outputs
     qf15[igood] = 1
+    qf15[inan]  = 9
 
     # Return quality flag
     return qf15
 
 # ---------- #
-def test16(lt,Ns,Nf,eps):
+def test16(lt,*args):
     '''
     Long-term time series flat line.
 
-    Check invariate observations from sensor and/or data collection failure.
+    Check for invariate observations from sensor or data collection failure.
 
-    "Ns"        is the occurence of equal data considered suspsect ;
-    "Nf"        is the occurence of equal data considered fail.
+    "args" must comprise:
+    "Ns"        the suspicious consecutive number of same data ;
+    "Nf"        the faulty consecutive number of same data ;
+    "eps"       the difference not allowed to be exceeded.
 
     Status: Required
     '''
 
-    # Get "lt" dimensions
-    dim = len(lt)
+    # Unpack "lt"
+    bwp,_,_,_ = [l for l in lt]
+
+    # Unpack "args"
+    Ns,Nf,eps = tuple(args)
 
     # Initialize output
-    qf16 = np.ones(dim)
+    dim  = len(bwp)
+    qf16 = ones(dim)
 
-    # Iterate over values to count gaps and flat lines
+    # Iterate over values to measure the length of flat lines
     i,j = 0,1
     while j<dim:
         cnt = 1
-        while abs(lt[j]-lt[i])<eps and abs(lt[j])>=eps and abs(lt[i])>=eps:
+        while abs(bwp[j]-bwp[i])<=eps\
+        and abs(array(bwp[j]))>=eps and abs(array(bwp[i]))>=eps:
             j  += 1
             cnt+= 1
             if j==dim: break
-        if   cnt>=Nf: qf16[i:j+1] = 4
-        elif cnt>=Ns: qf16[i:j+1] = 3
-        else:         i,j = j,j+1
+        if   cnt>=Nf: qf16[i:j] = 4           # (4), long flat lines
+        elif cnt>=Ns: qf16[i:j] = 3           # (3), suspicious flat lines
+        else:         i,j       = j,j+1       # (1), no flat line
+
+    # Flag missing "NaN" values (9)
+    qf16[where(isnan(bwp))[0]] = 9
 
     # Return quality flag
     return qf16
 
 # ---------- #
-def test17(freq,CS,imin,imax,lmin,lmax,eps=1.E-8):
+def test17(lt,*args):
     '''
     Long-term time series operational frequency range.
 
-    Check if spectral values are measured for a valid frequency range.
-    Instead of flagging failed data outside the range, they should be
-    already padded with zeros as originally done by Spotter operator. However,
-    suspect data are flagged.
+    Check if spectral values are measured inside a valid frequency range.
+    Note that instead of flagging failed data outside the range, they should
+    have already been filtered, or padded with zeros or "NaN" by the operator.
 
-    "freq"      are the frequencies ;
-    "CS"        are the "XX", "YY" and "ZZ" cross-spectral density ;
-    "imin"      is the instrument operator given minimum ;
-    "imax"      is the instrument operator given maximum ;
-    "lmin"      is the regional/seasonal/climate/sensor-dependant minimum ;
-    "lmax"      is the regional/seasonal/climate/sensor-dependant maximum ;
+    "args" must comprise:
+    "freq"      frequencies ;
+    "csd_dep"   bulk wave parameters CSD dependancies ;
+    "imin"      the instrument minimum range operator-defined ;
+    "imax"      the instrument maximum range operator-defined ;
+    "lmin"      the regional/seasonal/climate/sensor-dependant minimum ;
+    "lmax"      the regional/seasonal/climate/sensor-dependant maximum ;
+    "eps"       a noisefloor not to be exceeded outside the valid range.
 
     Status: Required
     '''
 
-    # Unpack "CS"
-    sxx,syy,szz = CS[:,0],CS[:,1],CS[:,2]
+    # Unpack "lt"
+    _,sxx,syy,szz = [l for l in lt]
 
-    # Find failed index
-    ifail     = where((freq<imin)*(freq>imax))[0]
-    bexp_fail = any(abs(sxx[ifail]>eps)) or\
-                any(abs(syy[ifail]>eps)) or\
-                any(abs(szz[ifail]>eps))
+    # Unpack "args"
+    freq,csd_dep,imin,imax,lmin,lmax,eps = tuple(args)
 
-    # Find any suspect range
+    # Initialize outputs
+    dim  = shape(sxx)[0]
+    qf17 = ones(dim)
+
+    # Find indices where data lie outside the faulty or suspicious range
+    ifail    = where((freq<imin)*(freq>imax))[0]
     isus     = where((freq<lmin)*(freq>lmax))[0]
-    bexp_sus = any(abs(sxx[isus]>eps)) or\
-               any(abs(syy[isus]>eps)) or\
-               any(abs(szz[isus]>eps))
+    csd_vars = []
+    for cs in csd_dep: exec(f"csd_vars.append({cs})",globals(),locals())
+
+    # Search for any spectra exceeding noisefloor at selected frequencies
+    ifail,isus,inan = [[] for _ in range(3)]
+    for i in range(dim):
+        stdout_fail,stdout_sus,stdout_nan = [[] for _ in range(3)]
+        for cs in csd_vars:
+            exec(f"stdout_fail.append(any(abs(cs[i,ifail])))",
+                 globals(),locals())
+            exec(f"stdout_sus.append(any(abs(cs[i,isus])))",
+                 globals(),locals())
+            exec(f"stdout_nan.append(all(isnan(cs[i,:])))",
+                 globals(),locals())
+        if any(stdout_fail):ifail.append(i)
+        if any(stdout_sus):isus.append(i)
+        if any(stdout_nan):inan.append(i)
+
+    # Append results
+    qf17[isus]  = 3
+    qf17[ifail] = 4
+    qf17[inan]  = 9
 
     # Return quality flag
-    if   bexp_fail: return 4                    # 4 (fail) outside range
-    elif bexp_sus:  return 3                    # 3 (suspect) suspect range
-    else:           return 1                    # 1 (good) range
+    return qf17
 
 # ---------- #
-def test18(data):
+def test18(lt,*args):
     '''
     Long-term time series low-frequency energy.
 
     Compare fetch and swell wave direction at low frequencies with minimum
     and maximum energy.
 
-    Status : Required (not performed here for coastal environments)
+    Status: Required
     '''
 
-    # Get "lt" dimensions
-    dim = len(lt)
-
-    # Initialize output
-    qf18 = 2*np.ones(dim)
+    # /*
+    # Test not performed here, since we are filtering high-energy infragravity
+    # waves for AZMP buoys. Otherwise, one should perform the testing procedure
+    # accordingly with specified deep-water conditions.
+    # */
 
     # Return quality flag
-    return qf18
+    return 2*ones(len(lt[0]))
 
 # ---------- #
-def test19(lt,rmin,rmax,vname,hm0_flag):
+def test19(lt,*args):
     '''
     Long-term time series acceptable range of bulk wave parameters.
-
-    "rmin"      is the lower bound of acceptable range ;
-    "rmax"      is the upper bound of acceptable range ;
-    "vname"     is the variable tested.
-    "hm0_flag"  indicates if 'Hm0' has been previously tested and failed
+    "args" must comprise:
+    "rmin"      the lower bound of acceptable range ;
+    "rmax"      the upper bound of acceptable range ;
+    "set_flag"  should be 2 if variable is significant wave height, else 1
+                if variable is wave period or wave directional parameters,
+                else 0 ;
+    "prev_qf"   quality codes previously calculated for other wave parameters.
 
     "rmin" and "rmax" are either physically constrained (i.e. from 0 to 360
-    for direction and from 0 to 80 for spreading) or corresponds to the
-    operator lower and upper values.
+    for direction and, arbitrarly, from 0 to 80 for spreading) or corresponds
+    to the operator-defined lower and upper values.
 
-    If "vname" is "Hm0" (significant wave height), and the test fails, then 1
-    is additionnaly returned to flag other wave bulk parameters. Otherwise, 0
-    is additionnaly returned.
+    Significant wave height should be tested first. Then, results should be
+    taken into consideration for remaining tests. If the significant wave
+    height fails this test for some given times "t[i]", then all other wave
+    parameter quality codes should also being set to (4), for same "t[i]".
+    Otherwise, (3) should be indicated for remaining wave parameters. Hence,
+    "prev_qf" is a variable dedicated for updating and passed on every
+    "test_19" procedures. "set_flag" is a variable for indicating the type of
+    wave parameter:
+     4 for significant wave height ;
+     3 for wave period and other directional parameters.
 
     Status: Required
     '''
 
-    # Get "lt" dimensions
-    dim = len(lt)
+    # Unpack "lt"
+    bwp,_,_,_ = [l for l in lt]
+
+    # Unpack "args"
+    rmin,rmax,set_flag,prev_qf = tuple(args)
 
     # Initialize outputs
-    qf19 = np.ones(dim)
+    qf19 = prev_qf if len(prev_qf) else ones(len(bwp))
 
     # Find indices of values outside range
-    ibad = hstack([where(lt<rmin)[0],where(lt>rmax)[0]])
-
-    # Update 'hm0_flag'
-    if ~len(hm0_flag): hm0_flag = np.zeros(dim)
-    if vname=='Hm0':   hm0_flag[ibad] = 1
+    ibad = hstack([where(bwp<rmin)[0],where(bwp>rmax)[0]])
 
     # Update quality flag
-    qf19[ibad]               = 3
-    qf19[where(hm0_flag)[0]] = 4
+    for i in range(len(bwp)):
+        if i in ibad: qf19[i] = max(qf19[i],set_flag)
 
-    # Return quality flag and "hm0_flag"
-    return qf19,hm0_flag
+    # Return quality flag
+    return qf19
 
 # ---------- #
-def test20(lt,ibad,delta,rmin,rmax):
+def test20(lt,*args):
     '''
     Long-term time series acceptable variation of bulk wave parameters.
 
-    "ibad"      are the indices to omit ;
-    "delta"     is the acceptable variation ;
-    "rmin"      is the minimum value that an instance of "lt" must have ;
-    "rmax"      is the maximum value that an instance of "lt" must have ;
+    "args" must comprise:
+    "rmin"      the lower bound of acceptable range ;
+    "rmax"      the upper bound of acceptable range ;
+    "eps"       the acceptable variation.
 
     Status: Required
     '''
 
-    # Swap "lt" to array
-    lt = np.array(np.copy(lt))
+    # Unpack "lt"
+    bwp,_,_,_ = [l for l in lt]
 
-    # Get "lt" dimensions
-    dim = len(lt)
+    # Unpack "args"
+    rmin,rmax,eps = tuple(args)
 
     # Initialize output
-    qf20 = np.ones(dim)
-
-    # Pad bad values with "NaN"
-    lt[ibad] = np.nan
+    qf20 = ones(len(bwp))
 
     # Compute variation
-    ivar = where(abs(np.diff(lt))>delta)[0] + 1
-    imin = where(lt<=rmin)[0]
-    imax = where(lt>=rmax)[0]
+    ivar = where(abs(diff(bwp))>eps)[0] + 1
+    imin = where(bwp<=rmin)[0]
+    imax = where(bwp>=rmax)[0]
     ibad = []
-    [ibad.append(i) if i not in imin and i not in imax else None\
-     for i in ivar]
+    [ibad.append(i) if i not in hstack([imin,imax]) else None for i in ivar]
 
     # Append outputs
-    qf20[ibad] = 4
+    if len(ibad): qf20[ibad] = 4
+
+    # Flag missing "NaN" values (9)
+    qf20[where(isnan(bwp))] = 9
 
     # Return quality flag
     return qf20
 
 # ---------- #
-def getLTQF(data,qf_spv,varname,qf_d):
+def getLTQF(data,varname,qf_d,update_hm0=False):
     '''
-    Carry all LT tests up to 20 for a given data.
+    Carry all LT tests for a given data.
     '''
-
-    # Compute dimension
-    dim = len(data)
-
-    # Initialize 'qf' outputs
-    t_14,t_15,t_16,t_17,t_18,t_19,t_20 = [2*np.ones(dim) for _ in range(7)]
-
-    # Retrieve variable "bwp" ticker index
-    i_tck,f_tck = -1,0
-    for t in qf_d['Tickers']:
-        i_tck+= 1
-        if varname==t: f_tck=1; break
-
-    # Retrieve data index to carry on tests
-    bexp      = np.array(qf_spv)=='1.0'
-    i_to_test = where(bexp)[0]
-    i_failed  = where(np.invert(bexp))[0]
 
     # Do tests
     print('\n\nQuality control for %s'%varname)
+    dim = len(data[0])
 
-    # Test 14
-    if qf_d['Test_14']['Do_Test']:
-        # Unpack test parameters
-        _,wnum14,freq14,H14,CS14,fval14,bw14 = qf_d['Test_14'].values()
+    # Loop for each test
+    for o in [k.split('_')[-1] for k in qf_d.keys()\
+              if k.split('_')[-1]!='Order']:
+        qft = []
+        if qf_d['Test_%s'%o]['Do_Test'] and not len(qf_d['Test_%s'%o]['QF']):
+            # Unpack test parameters
+            args = [v for k,v in qf_d['Test_%s'%o].items()\
+                    if k not in ['Do_Test','QF']]
 
-        # Print progress
-        print('\tPerforming test 14: LT check factor...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
+            # Perform test if not already performed
+            exec("global stdout; stdout=test%s(data,*args)"\
+                 %o,globals(),locals())
+            qft = copy(stdout)
+            print('\tTest %s done.'%o)
+        elif len(qf_d['Test_%s'%o]['QF']):
+            print('\tTest %s already carried out.'%o)
+            qft = qf_d['Test_%s'%o]['QF']
+        else:
+            print('\tTest %s not carried out.'%o)
+            qft = 2*ones(dim)
 
-            # Perform test
-            t_14[i] = test14(wnum14,freq14,H14,CS14[:,i,:],fval14[i,:],bw14)
+        # Append test results
+        qf_d['Test_%s'%o]['QF'] = qft
 
-        print('\tTest 14 done.')
-    else: print('\tTest 14 not carried out.')
-
-    # Test 15
-    if qf_d['Test_15']['Do_Test'] and varname.split('_')[0]!='Theta':
-        # Unpack test parameters
-        N15 = qf_d['Test_15']['N']
-
-        # Print progress
-        print('\tPerforming test 15: LT mean and standard deviation...')
-        _ = printProgress(0,[])
-
-        # Perform test
-        t_15 = test15(data,N15)
-        _    = printProgress(20,[0])
-
-        print('\tTest 15 done.')
-    else: print('\tTest 15 not carried out.')
-
-    # Test 16
-    if qf_d['Test_16']['Do_Test'] and f_tck:
-        # Unpack test parameters
-        Ns16  = qf_d['Test_16']['Ns']
-        Nf16  = qf_d['Test_16']['Nf']
-        eps16 = qf_d['Test_16']['eps'][i_tck]
-
-        # Print progress
-        print('\tPerforming test 16: LT flat line...')
-        _ = printProgress(0,[])
-
-        # Perform test
-        t_16 = test16(data,Ns16,Nf16,eps16)
-        _    = printProgress(20,[0])
-
-        print('\tTest 16 done.')
-    else: print('\tTest 16 not carried out.')
-
-    # Test 17
-    if qf_d['Test_17']['Do_Test']:
-        # Unpack test parameters
-        _,freq17,CS17,imin17,imax17,lmin17,lmax17 = qf_d['Test_17'].values()
-
-        # Print progress
-        print('\tPerforming test 17: LT operational frequency range...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
-
-            # Perform test
-            t_17[i] = test17(freq17,CS17[:,i,:],imin17,imax17,lmin17,lmax17)
-
-        print('\tTest 17 done.')
-    else: print('\tTest 17 not carried out.')
-
-    # Test 18
-    if qf_d['Test_18']['Do_Test']:
-        # Unpack test parameters
-        _ = qf_d['Test_18'].values()
-
-        # Print progress
-        print('\tPerforming test 18: LT low-frequency energy...')
-        _ = printProgress(0,[])
-
-        # Perform test
-        t_18 = test18(data)
-        _    = printProgress(20,[0])
-
-        print('\tTest 18 done.')
-    else: print('\tTest 18 not carried out.')
-
-    # Test 19
-    if qf_d['Test_19']['Do_Test'] and f_tck:
-        # Unpack test parameters
-        rmin19   = qf_d['Test_19']['rmin'][i_tck]
-        rmax19   = qf_d['Test_19']['rmax'][i_tck]
-        hm0_flag = qf_d['Test_19']['hm0_flag']
-
-        # Print progress
-        print('\tPerforming test 19: LT acceptable range...')
-        _ = printProgress(0,[])
-
-        # Perform test
-        t_19,hm0_flag = test19(data,rmin19,rmax19,varname,hm0_flag)
-        _             = printProgress(20,[0])
-
-        # Update "hm0_flag"
-        qf_d['Test_19']['hm0_flag'] = hm0_flag
-
-        print('\tTest 19 done.')
-    else: print('\tTest 19 not carried out.');
-
-    # Test 20
-    if qf_d['Test_20']['Do_Test'] and f_tck:
-        # Unpack test parameters
-        rmin19  = qf_d['Test_19']['rmin'][i_tck]
-        rmax19  = qf_d['Test_19']['rmax'][i_tck]
-        delta20 = qf_d['Test_20']['delta'][i_tck]
-
-        # Print progress
-        print('\tPerforming test 20: LT acceptable variation...')
-        _ = printProgress(0,[])
-
-        # Perform test without failed spectral variables
-        t_20 = test20(data,i_failed,delta20,rmin19,rmax19)
-        _    = printProgress(20,[0])
-
-        print('\tTest 20 done.')
-    else: print('\tTest 20 not carried out.')
-
-    # Compute secondary quality flag for all tests
-    t_qf = getLTQFSecondary(t_14,t_15,t_16,t_17,t_18,t_19,t_20)
-
-    # Append to indices to test
-    qf_data            = np.copy(qf_spv)
-    qf_data[i_to_test] = np.array(t_qf)[i_to_test]
+    # Compute secondary quality flag
+    qf_data = getQFSecondary(qf_d)
 
     # Return corrected variables and associated quality flags
-    return data,qf_data,qf_d
+    return data[0],qf_data
 
 # ---------- #
-def getLTQFSecondary(qf14,qf15,qf16,qf17,qf18,qf19,qf20):
-    '''
-    Establish a secondary quality flag for long-term time series based on
-    scores from tests 14 to 20.
-
-    If any "XX" or "YY" flags, a scondary flag is established as follow:
-        (X.14)  if quality flag "X" from test 14
-        (X.15)  if quality flag "X" from test 15
-        (X.16)  if quality flag "X" from test 16
-        (X.17)  if quality flag "X" from test 17
-        (X.18)  if quality flag "X" from test 18
-        (X.19)  if quality flag "X" from test 19
-        (X.20)  if quality flag "X" from test 20
-
-    If all 1 or 2, or any 9, the quality flag is passed without any secondary
-    one. Else, a "NaN" value is established, but this should raise a warning.
-    '''
-
-    # Initialize output
-    dim = len(qf14)
-    qf  = []
-
-    # Matricize index in priority: 17,16,19,20,15,14,18
-    qf_order = [qf17,qf16,qf19,qf20,qf15,qf14,qf18]
-    qf_num   = [17,16,19,20,15,14,18]
-    m1       = transpose([qf==1 for qf in qf_order])
-    m2       = transpose([qf==2 for qf in qf_order])
-    m3       = transpose([qf==3 for qf in qf_order])
-    m4       = transpose([qf==4 for qf in qf_order])
-    m9       = transpose([qf==9 for qf in qf_order])
-
-    # Append code to corresponding first flagged test
-    # 4-3-2-1-9            code priority
-    # 14-15-16-17-18-19-20 test priority
-    isec = 14
-    for i in range(dim):
-        if   any(m9[i]):       qf.append('9.0')
-        elif any(m4[i]):       qf.append('4.%d'%qf_num[where(m4[i])[0][0]])
-        elif any(m3[i]):       qf.append('3.%d'%qf_num[where(m3[i])[0][0]])
-        elif all(m2[i]):       qf.append('2.0')
-        elif all(m1[i]+m2[i]): qf.append('1.0')
-        else:                  qf.append(np.nan)
-
-    # Return quality flag with secondary flag
-    return qf
-
-# ---------- #
-def getQFCombined(qfa,qfb,qf_num=[9,11,10,12,13,17,16,19,20,15,14,18]):
+def getQFCombined(qfa,qfb,qf_ord):
     '''
     Establish the quality flag for a variable computed from "a" and "b".
     The maximum quality flag is kept. If both 'QF' have the same principal
     quality flag, the smaller secondary quality flag is chosen based on
-    "qf_num" is chosen.
+    "qf_ord" is chosen.
     '''
 
-    pqa,sqa = float(qfa.split('.')[0]),float(qfa.split('.')[1])
-    pqb,sqb = float(qfb.split('.')[0]),float(qfb.split('.')[1])
+    pqa,sqa = [q for q in qfa.split('.')]
+    pqb,sqb = [q for q in qfb.split('.')]
+
     if pqa>pqb:
-        primary   = pqa
-        secondary = sqa
+        prm = pqa
+        sec = sqa
     elif pqa<pqb:
-        primary   = pqb
-        secondary = sqb
+        prm = pqb
+        sec = sqb
     else:
-        primary   = pqa
-        i_a       = abs(np.array(qf_num)-sqa).argmin() if sqa else np.nan
-        i_b       = abs(np.array(qf_num)-sqb).argmin() if sqb else np.nan
-        secondary = np.array(qf_num)[np.nanmin([i_a,i_b])] if sqa or sqb\
-                    else 0
+        prm = pqa
+        i_a = where([q==sqa for q in qf_ord])[0][0] if sqa!='0' else nan
+        i_b = where([q==sqb for q in qf_ord])[0][0] if sqb!='0' else nan
+        sec = array(qf_ord)[nanmin([i_a,i_b])] if ~isnan(i_a) or ~isnan(i_a)\
+              else 0
 
     # Return combined quality flag
-    return '%d.%d'%(primary,secondary)
+    return '%s.%s'%(prm,sec)
 
 # ---------- #
 def getSTQF(data,varname,qf_d):
@@ -701,177 +611,189 @@ def getSTQF(data,varname,qf_d):
     Carry all ST tests for a given data.
     '''
 
-    # Compute dimension
-    dim = len(data)
-
-    # Initialize 'qf' outputs
-    qf9,qf10,qf11,qf12,qf13 = [2*np.ones(dim) for _ in range(5)]
-
     # Do tests
     print('\n\nQuality control for %s'%varname)
+    dim = shape(data)[0]
 
-    # Test 9
-    if qf_d['Test_9']['Do_Test']:
-        # Unpack test parameters
-        _,N9 = qf_d['Test_9'].values()
+    # Loop for each test
+    for o in [k.split('_')[-1] for k in qf_d.keys()\
+              if k.split('_')[-1]!='Order']:
+        qft = []
+        if qf_d['Test_%s'%o]['Do_Test'] and not len(qf_d['Test_%s'%o]['QF']):
+            # Unpack test parameters
+            args = [v for v in qf_d['Test_%s'%o].values()][1:-3]
 
-        # Print progress
-        print('\tPerforming test 9: ST gap...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
+            # Print progress
+            print('\tPerforming test %s...'%o)
+            progress = []
+            for i in range(dim):
+                # Progress
+                iprog    = int(i/(dim-1)*20)
+                progress = printProgress(iprog,progress)
 
-            # Perform test
-            data[i],qf9[i] = test9(data[i],N9)
+                # Perform test if not already performed
+                exec("global stdout; stdout=test%s(data[i],*args)"\
+                     %o,globals(),locals())
+                if qf_d['Test_%s'%o]['Update_Data']:
+                    data[i] = stdout[0]
+                    qft.append(stdout[1])
+                else:
+                    qft.append(stdout)
+            print('\tTest %s done.'%o)
+        elif len(qf_d['Test_%s'%o]['QF']):
+            print('\tTest %s already carried out.'%o)
+            qft = qf_d['Test_%s'%o]['QF']
+        else:
+            print('\tTest %s not carried out.'%o)
+            qft = 2*ones(dim)
 
-        print('\tTest 9 done.')
-    else: print('\tTest 9 not carried out.')
-
-    # Test 10
-    if qf_d['Test_10']['Do_Test']:
-        # Unpack test parameters
-        _,N10,m10 = qf_d['Test_10'].values()
-
-        # Print progress
-        print('\tPerforming test 10: ST spike...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
-
-            # Perform test
-            data[i],qf10[i] = test10(data[i],N10,m10)
-
-        print('\tTest 10 done.')
-    else: print('\tTest 10 not carried out.')
-
-    # Test 11
-    if qf_d['Test_11']['Do_Test']:
-        # Unpack test parameters
-        _,imin11,imax11,lmin11,lmax11,nbins11 = qf_d['Test_11'].values()
-
-        # Print progress
-        print('\tPerforming test 11: ST range...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
-
-            # Perform test
-            qf11[i] = test11(data[i],imin11,imax11,lmin11,lmax11,nbins11)
-
-        print('\tTest 11 done.')
-    else: print('\tTest 11 not carried out.')
-
-    # Test 12
-    if qf_d['Test_12']['Do_Test']:
-        # Unpack test parameters
-        _,m12,delta12 = qf_d['Test_12'].values()
-
-        # Print progress
-        print('\tPerforming test 12: ST segment shift...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
-
-            # Perform test
-            qf12[i] = test12(data[i],m12,delta12)
-
-        print('\tTest 12 done.')
-    else: print('\tTest 12 not carried out.')
-
-    # Test 13
-    if qf_d['Test_13']['Do_Test']:
-        # Unpack test parameters
-        _,N13 = qf_d['Test_13'].values()
-
-        # Print progress
-        print('\tPerforming test 13: ST acceleration...')
-        progress = []
-        for i in range(dim):
-            # Progress
-            iprog    = int(i/(dim-1)*20)
-            progress = printProgress(iprog,progress)
-
-            # Perform test
-            qf13[i] = test13(data[i],N13)
-
-        print('\tTest 13 done.')
-    else: print('\tTest 13 not carried out.')
+        # Append test results
+        qf_d['Test_%s'%o]['QF'] = qft
 
     # Compute secondary quality flag
-    qf_data = getSTQFSecondary(qf9,qf10,qf11,qf12,qf13)
+    qf_data = getQFSecondary(qf_d)
 
     # Return corrected variables and associated quality flags
     return data,qf_data
 
 # ---------- #
-def getSTQFSecondary(qf9,qf10,qf11,qf12,qf13):
-    '''
-    Establish a secondary quality flag for short-term time series based on
-    scores from tests 9 to 13.
+def getQFSecondary(qf_dct):
 
-    If any 3 or 4 flags, a scondary flag is established as follow:
-        (X.9)   if quality flag "X" from test 9
-        (X.10)  if quality flag "X" from test 10
-        (X.11)  if quality flag "X" from test 11
-        (X.12)  if quality flag "X" from test 12
-        (X.13)  if quality flag "X" from test 13
+    '''
+    Establish a secondary quality flag for short- or long-term time series.
+
+    "qf" is a dictionnary containing primary quality code for each test.
+    "qf.keys()" must corresponds to the test number, which is used here
+    as secondary quality code.
+
+    As multiple tests may flag data, priority number is indicated in
+    "qf_dct.Test_Order" entries, from the first being in less priority, and the
+    last being the most prioritary one.
+
+    If any 3 or 4 flags, the quality code is established as follow:
+        (X.Y) if quality flag "X" from test "Y"
 
     If all 1 or 2, or any 9, the quality flag is passed without any secondary
     one. Else, a "NaN" value is established, but this should raise a warning.
     '''
 
     # Initialize output
-    dim = len(qf9)
-    qf  = []
+    qf_val,qf_sec,qf_out = [[] for _ in range(3)]
 
-    # Matricize index in priority: 9-11-10-12-13
-    qf_order = [qf9,qf11,qf10,qf12,qf13]
-    qf_num   = [9,11,12,10,13]
-    m1       = transpose([qf==1 for qf in qf_order])
-    m2       = transpose([qf==2 for qf in qf_order])
-    m3       = transpose([qf==3 for qf in qf_order])
-    m4       = transpose([qf==4 for qf in qf_order])
-    m9       = transpose([qf==9 for qf in qf_order])
+    # Retrieve test results by specified order
+    qf_ord = qf_dct['Test_Order']
+    [qf_val.append(qf_dct['Test_%s'%o]['QF'])\
+     if o in [k.split('_')[-1] for k in qf_dct.keys()]\
+     and len(qf_dct['Test_%s'%o]['QF']) else None\
+     for o in qf_ord]
+    [qf_sec.append(o) if o in [k.split('_')[-1] for k in qf_dct.keys()]\
+     else None\
+     for o in qf_ord]
+
+    # Matricize primary indice
+    m1 = np.transpose([[q==1 for q in qf] for qf in qf_val])
+    m2 = np.transpose([[q==2 for q in qf] for qf in qf_val])
+    m3 = np.transpose([[q==3 for q in qf] for qf in qf_val])
+    m4 = np.transpose([[q==4 for q in qf] for qf in qf_val])
+    m9 = np.transpose([[q==9 for q in qf] for qf in qf_val])
 
     # Append code to corresponding first flagged test
-    # 4-3-2-1-9     code priority
-    for i in range(dim):
-        if   any(m9[i]):       qf.append('9.0')
-        elif any(m4[i]):       qf.append('4.%d'%qf_num[where(m4[i])[0][0]])
-        elif any(m3[i]):       qf.append('3.%d'%qf_num[where(m3[i])[0][0]])
-        elif all(m2[i]):       qf.append('2.0')
-        elif all(m1[i]+m2[i]): qf.append('1.0')
-        else:                  qf.append(np.nan)
+    # 9-4-3-2-1 code priority
+    for i in range(len(m1)):
+        if any(m9[i]):         qf = '9.0'
+        elif any(m4[i]):       qf = '4.%s'%qf_sec[where(m4[i])[0][-1]]
+        elif any(m3[i]):       qf = '3.%s'%qf_sec[where(m3[i])[0][-1]]
+        elif all(m2[i]):       qf = '2.0'
+        elif all(m1[i]+m2[i]): qf = '1.0'
+        else:                  qf = 'nan'
+        qf_out.append(qf)
 
     # Return quality flags with secondary flags
-    return qf
+    return qf_out
+
+# ----------#
+def normalizeAclSTQF(qf_data,qf_dct):
+    '''
+    Normalize quality codes between 3D surface motion ST time series, following
+    the same priority order as defined in the "getSTQFSecondary" function.
+
+    If acceleration data of the same type ("h" for horizontal or "v" for
+    vertical) shares dissimilar quality codes for a given time, then their
+    quality code are normalized.
+
+    "data" must be formatted as follows: "[x_acl,y_acl,z_acl]"
+    "qf_data" must be formatted as follows: "[qf_x_acl,qf_y_acl,qf_z_acl]"
+    '''
+
+    # Initialize outputs
+    n_qf_h,n_qf_v = [[] for _ in range(2)]
+
+    # "st" dimensions
+    for qf in qf_data:
+        if len(qf):
+            dim=len(qf)
+            break
+
+    # Normalize quality codes
+    for i in range(dim):
+        qf_h,qf_v = [nan for _ in range(2)]
+        # Retrieve primary and secondary quality codes
+        qf_prm = array([qf[i].split('.')[0] for qf in qf_data])
+        qf_sec = array([qf[i].split('.')[1] for qf in qf_data])
+
+        # Normalize quality flag per type and test order
+        if '4' in qf_prm:
+            iqf = where(qf_prm=='4')[0]
+            for o in qf_dct['Test_Order']:
+                if o in qf_sec[iqf]:
+                    qf_v = '4.%s'%o if 'v' in qf_dct['Test_%s'%o]['Type'] else\
+                           '%s.%s'%(qf_prm[2],qf_sec[2])
+                    qf_h = '4.%s'%o if 'h' in qf_dct['Test_%s'%o]['Type'] else\
+                           getQFCombined('%s.%s'%(qf_prm[0],qf_sec[0]),
+                                         '%s.%s'%(qf_prm[1],qf_sec[1]))
+                    break
+        elif '3' in qf_prm:
+            iqf = where(qf_prm=='3')[0]
+            for o in qf_dct['Test_Order']:
+                if o in qf_sec[iqf]:
+                    qf_v = '3.%s'%o if 'v' in qf_dct['Test_%s'%o]['Type'] else\
+                           '%s.%s'%(qf_prm[2],qf_sec[2])
+                    qf_h = '3.%s'%o if 'h' in qf_ctd['Test_%s'%o]['Type'] else\
+                            getQFCombined('%s.%s'%(qf_prm[0],qf_sec[0]),
+                                          '%s.%s'%(qf_prm[1],qf_sec[1]))
+                    break
+        else:
+            qf_h = '1.0' if all([qf=='1' for qf in qf_prm[:2]]) else\
+                   '9.0' if any([qf=='9' for qf in qf_prm[:2]]) else\
+                   '2.0'
+            qf_v = '1.0' if qf_prm[2]=='1' else\
+                   '9.0' if qf_prm[2]=='9' else\
+                   '2.0'
+
+        # Append normalized quality code
+        n_qf_h.append(qf_h)
+        n_qf_v.append(qf_v)
+
+    return array(n_qf_h),array(n_qf_v)
 
 # Aditionnal functions
 # ---------- #
 def removeOutliers(date,x,n,min_val,method='mad'):
     '''
-    Remove zero values and outliers using median absolute deviation.
+    Remove zero values and outliers using median absolute deviation criterion.
     '''
 
     # Find good indices
     i_inval   = where(x>min_val)[0]
-    i_not_nan = where(np.invert(isnan(x)))[0]
-    i_good    = np.unique(hstack([i_inval,i_not_nan]))
+    i_not_nan = where(invert(isnan(x)))[0]
+    i_good    = unique(hstack([i_inval,i_not_nan]))
 
     # Keep good indices
     date = date[i_good]
     x    = x[i_good]
 
     # Find outliers
-    x_dev = x - np.median(x)
+    x_dev = x - median(x)
     thrs  = -n/(2**(1/2)*erfcinv(3/2))*mad(x)
     i_out = where(abs(x_dev)<thrs)[0]
 
@@ -891,13 +813,13 @@ def movMean(x,m,index_list,remove_i=False):
 
     dim   = len(x)
     i0,i1 = -m,m+1
-    mx    = np.copy(x)
+    mx    = copy(x)
 
     for i in index_list:
-        xx    = hstack([mx[max(0,i+i0):i],mx[i+1:min(i+i1,dim)]]) if remove_i\
-                else mx[max(0,i+i0):min(i+i1,dim)]
-        mx[i] = [np.nan if len(where(isnan(xx))[0])==len(xx)\
-                 else np.nanmean(xx)][0]
+        xx = hstack([mx[max(0,i+i0):i],mx[i+1:min(i+i1,dim)]]) if remove_i\
+             else mx[max(0,i+i0):min(i+i1,dim)]
+        if not len(where(isnan(xx))[0])==len(xx):
+            mx[i] = nanmean(xx)
 
     return mx
 
