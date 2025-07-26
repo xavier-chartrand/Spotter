@@ -65,6 +65,7 @@ def test9(st,N):
         for i in range(len(idiff)):
             i,j = j if j else i,0
             while idiff[i+j]==1 and j<len(idiff):
+                print(j,N)
                 if j<N-1: j+= 1
                 else: return st,4               # 4 (fail) at least "N" gap
 

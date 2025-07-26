@@ -57,7 +57,7 @@ def test9(st,*args):
     if len(where(isnan(st))[0])==len(st): return st,9
 
     # Unpack "args" and get "st" dimensions
-    N   = tuple(args)
+    N   = tuple(args)[0]
     dim = len(st)
 
     # Check for data gap with "NaN" index
