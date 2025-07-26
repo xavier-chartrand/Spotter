@@ -26,7 +26,7 @@ plt.rcParams.update({
 
 ## MAIN
 # Parameters
-buoy      = 'spot1082'
+buoy      = 'spot-0572'
 year      = 2023
 month     = range(5,12)
 lvl2_dir  = '../../lvl2/'
