@@ -86,6 +86,7 @@ def test10_quartod(st,N,m,p=2,thrs=0.1):
     "m"         is the number of points of the segment centered on "x[i]"
                 that is used to replace spikes with the segment average around
                 "x[i]" (x[i] is excluded from the mean calculation) ;
+    "p"         is the number of times the test is rerun ;
     "thrs"      is the fraction of the number of spikes or outliers over the
                 total series length that is not allowed to be exceeded.
 

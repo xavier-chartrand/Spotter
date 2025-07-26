@@ -578,9 +578,9 @@ def writeLvl1(lvl_d,qflt_d):
     theta_mean,theta_peak  = [[] for _ in range(2)]
     sigma_mean,sigma_peak  = [[] for _ in range(2)]
 
-    ## PARSE LEVEL 1
+    ## MAIN ITERATION
     # Iterate over "lvl0" data
-    print('\nParsing level 1 for %s...'%buoy)
+    print('\nParsing Level 1 for %s...'%buoy)
     progress = []
     for i in range(dim):
         # Progress

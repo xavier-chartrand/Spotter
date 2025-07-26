@@ -495,11 +495,11 @@ def writeLvl0(lvl_d,qfst_d):
                                'Units':'Hertz'}
     DSout.Water_Depth.attrs = {'Description':'Water column depth',
                                'Units':'Meter'}
-    DSout.Time.attrs        = {'Description':'Start timestamp of 30-minutes '\
+    DSout.Time.attrs        = {'Description':'Start timestamp of 30-minute '\
                                             +'records',
                                'Units':'Timestamp'}
     DSout.Time_Range.attrs  = {'Description':'Time range of regularly '\
-                                            +'sampled 30-minutes records',
+                                            +'sampled 30-minute records',
                                'Units':'Second'}
 
     # Write NetCDF
@@ -578,10 +578,11 @@ def writeLvl1(lvl_d,qflt_d):
     theta_mean,theta_peak  = [[] for _ in range(2)]
     sigma_mean,sigma_peak  = [[] for _ in range(2)]
 
-    ## PARSE LEVEL 1
-    # Iterate over "lvl0" data
-    print('\nParsing level 1 for %s...'%buoy)
+    ## MAIN ITERATION
+    print('\nParsing Level 1 for %s...'%buoy)
     progress = []
+
+    # Iterate over "lvl0" data
     for i in range(dim):
         # Progress
         iprog    = int(i/(dim-1)*20)
@@ -851,7 +852,6 @@ def writeLvl1(lvl_d,qflt_d):
                                                   +'dispersion relation for '\
                                                   +'surface gravity waves',
                                      'Units':'Radian per meter'}
-
 
     # Write NetCDF for spectral variables
     sh('rm %s'%lvl_d['Output']['LVL1_File'][0])
