@@ -1,12 +1,11 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
 # Email : x.chartrand@protonmail.me
+#         xavier.chartrand@uqar.ca
 #         xavier.chartrand@ec.gc.ca
 
 '''
-Compute statistics for SPOT buoy, from AZMP OGSL data.
-
-The station "iml-4" is chosen as it it the closest to Spotter deployments.
+Compute statistics for AZMP buoys, from AZMP OGSL data.
 '''
 
 # Custom utilities
@@ -14,7 +13,7 @@ from ogsl_statistics_utils import *
 
 # ---------- #
 ## MAIN
-# Stations: iml-[4]
+# Stations: iml-[4,6,7,10,11,12,14]
 station_list = ['iml-4']
 
 # Dictionnaries
@@ -26,8 +25,8 @@ header_k = {'Date':'Date',
             'Salinity':'Salinity',
             'Temperature':'Water Temperature',
             'WindSpeed':'Wind Speed',
-            'WindGusts':'Wind Gust',
-            'WindDirection':'Wind Direction',
+            'WindGusts':'Wind Gusts',
+            'WindProvenance':'Wind Provenance',
             'Hm0':'Wave Significant Height',
             'Tm01':'Wave Period',
             'ThetaMean':'Wave Mean Direction',
@@ -54,7 +53,7 @@ for station in station_list:
     # Initialize outputs
     date,atemp,sig,pres,sal,temp,wspd,wgst,hm0,tm01 = [[] for _ in range(10)]
 
-    # Append data
+    # Append data, and convert wind speed from knots to meter per second
     for file in f_list:
         DS = pd.read_csv(file,delimiter=',',skipinitialspace=True)
         date.append(DS[header_k['Date']])
@@ -63,8 +62,8 @@ for station in station_list:
         pres.append(DS[header_k['Pressure']])
         sal.append(DS[header_k['Salinity']])
         temp.append(DS[header_k['Temperature']])
-        wspd.append(DS[header_k['WindSpeed']])
-        wgst.append(DS[header_k['WindGusts']])
+        wspd.append(DS[header_k['WindSpeed']]*467/900)
+        wgst.append(DS[header_k['WindGusts']]*467/900)
         hm0.append(DS[header_k['Hm0']])
         tm01.append(DS[header_k['Tm01']])
 
@@ -80,7 +79,7 @@ for station in station_list:
     hm0   = hstack(hm0)
     tm01  = hstack(tm01)
 
-    # Minimal acceptable values (based on Spotter specifications)
+    # Minimal acceptable values (some are based on Spotter specifications)
     # "hm0" min value is given by the buoy error on displacement which is 2cm
     # "tm01" values is the minimal period detected, which is 1.25s
     min_vals = [-10,1000,95,0,0,0,0,0.02,1.25]
@@ -101,59 +100,59 @@ for station in station_list:
     _,tm01  = removeOutliers(date,tm01,std_vals[8],min_vals[8])
 
     # Calculate statistical limits
-    atemp_l = [np.mean(atemp)-std_vals[0]*np.std(atemp),
-               np.mean(atemp)+std_vals[0]*np.std(atemp),
-               np.mean(atemp),
-               np.std(atemp),
+    atemp_l = [mean(atemp)-std_vals[0]*std(atemp),
+               mean(atemp)+std_vals[0]*std(atemp),
+               mean(atemp),
+               std(atemp),
                len(atemp)]
-    sig_l   = [np.mean(sig)-std_vals[1]*np.std(sig),
-               np.mean(sig)+std_vals[1]*np.std(sig),
-               np.mean(sig),
-               np.std(sig),
+    sig_l   = [mean(sig)-std_vals[1]*std(sig),
+               mean(sig)+std_vals[1]*std(sig),
+               mean(sig),
+               std(sig),
                len(sig)]
-    pres_l  = [np.mean(pres)-std_vals[2]*np.std(pres),
-               np.mean(pres)+std_vals[2]*np.std(pres),
-               np.mean(pres),
-               np.std(pres),
+    pres_l  = [mean(pres)-std_vals[2]*std(pres),
+               mean(pres)+std_vals[2]*std(pres),
+               mean(pres),
+               std(pres),
                len(pres)]
-    sal_l   = [np.mean(sal)-std_vals[3]*np.std(sal),
-               np.mean(sal)+std_vals[3]*np.std(sal),
-               np.mean(sal),
-               np.std(sal),
+    sal_l   = [mean(sal)-std_vals[3]*std(sal),
+               mean(sal)+std_vals[3]*std(sal),
+               mean(sal),
+               std(sal),
                len(sal)]
     temp_l  = [min_vals[4],
-               np.mean(temp)+std_vals[4]*np.std(temp),
-               np.mean(temp),
-               np.std(temp),
+               mean(temp)+std_vals[4]*std(temp),
+               mean(temp),
+               std(temp),
                len(temp)]
     wspd_l  = [min_vals[5],
-               np.mean(wspd)+std_vals[5]*np.std(wspd),
-               np.mean(wspd),
-               np.std(wspd),
+               mean(wspd)+std_vals[5]*std(wspd),
+               mean(wspd),
+               std(wspd),
                len(wspd)]
     wgst_l  = [min_vals[6],
-               np.mean(wgst)+std_vals[6]*np.std(wgst),
-               np.mean(wgst),
-               np.std(wgst),
+               mean(wgst)+std_vals[6]*std(wgst),
+               mean(wgst),
+               std(wgst),
                len(wgst)]
     hm0_l   = [min_vals[7],
-               np.mean(hm0)+std_vals[7]*np.std(hm0),
-               np.mean(hm0),
-               np.std(hm0),
+               mean(hm0)+std_vals[7]*std(hm0),
+               mean(hm0),
+               std(hm0),
                len(hm0)]
     tm01_l  = [min_vals[8],
-               np.mean(tm01)+std_vals[8]*np.std(tm01),
-               np.mean(tm01),
-               np.std(tm01),
+               mean(tm01)+std_vals[8]*std(tm01),
+               mean(tm01),
+               std(tm01),
                len(tm01)]
 
     # Set variables not calculated with statistical limits
-    ahumi_l  = [np.nan,np.nan,np.nan,np.nan,0]
-    wdir_l   = [0,360,np.nan,np.nan,0]
-    thetam_l = [0,360,np.nan,np.nan,0]
-    thetap_l = [0,360,np.nan,np.nan,0]
-    sigmam_l = [0,80,np.nan,np.nan,0]
-    sigmap_l = [0,80,np.nan,np.nan,0]
+    ahumi_l  = [nan,nan,nan,nan,0]
+    wdir_l   = [0,360,nan,nan,0]
+    thetam_l = [0,360,nan,nan,0]
+    thetap_l = [0,360,nan,nan,0]
+    sigmam_l = [0,80,nan,nan,0]
+    sigmap_l = [0,80,nan,nan,0]
 
     # Output keys and values
     tuples = [atemp_l,
@@ -172,7 +171,7 @@ for station in station_list:
               sigmam_l,
               sigmap_l]
 
-    # Pipe outputs
+    # Redirect outputs to CSV
     dir_out = 'statistics/'
     f_out   = '%s_statistics.csv'%station
     sh('''echo "# STATION %s">%s'''%(station,dir_out+f_out))

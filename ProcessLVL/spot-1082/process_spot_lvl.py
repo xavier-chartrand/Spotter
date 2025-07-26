@@ -6,13 +6,10 @@
 '''
 Copy and parse Spotter data 'lvl0', 'lvl1' and 'lvl2' to NetCDF.
 
-Directional moments (a1,b1,a2,b2) are computed from raw 3D displacement datas.
-
-Directional spectra are computed for the specified date, hour and minutes,
-usin a weigthed Fourier series.
+Directional moments (a1,b1,a2,b2) are computed from raw 3D displacement data.
 
 A Butterworth filter may be applied to filter low or high frequencies, or
-equivalently, low or high scales using the linear dispersion relation for
+equivalently, low or high wavenumbers using the linear dispersion relation for
 surface waves to associate an equivalent frequency.
 '''
 
@@ -20,6 +17,7 @@ surface waves to associate an equivalent frequency.
 from spot_utils import *
 
 ## BEGIN STREAM EDITOR
+#  CHECK FILE good_timestamps.txt for "cbd","ced"
 # Information about the buoy
 # buoy:         Buoy station to process (spot-[0572,1082])
 # year:         Year to process

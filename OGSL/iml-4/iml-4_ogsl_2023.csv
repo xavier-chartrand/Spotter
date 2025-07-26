@@ -1,4 +1,4 @@
-Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gust, Wind Direction, Air Temperature, Humidity
+Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gusts, Wind Provenance, Air Temperature, Humidity
 2023-06-17T16:00,8.24,24.91,101.37,19.33,4.5,1.6,2.4,36,50,41,10.1,90
 2023-06-17T16:30,8.17,24.96,101.36,19.38,4.7,1.6,2.4,36,47,45,10.1,89
 2023-06-17T17:00,8.46,25.05,101.35,19.41,4.8,1.6,2.7,37,48,40,10.1,86

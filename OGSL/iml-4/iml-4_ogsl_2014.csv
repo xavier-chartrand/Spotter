@@ -1,4 +1,4 @@
-Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gust, Wind Direction, Air Temperature, Humidity
+Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gusts, Wind Provenance, Air Temperature, Humidity
 2014-05-15T14:03,7.1,19.8,101.96,1015.6,0,0,0,9,11,41,7.4,88
 2014-05-15T14:18,6.6,19.9,101.94,1015.7,0,0,0,10,12,46,7.3,88
 2014-05-15T14:33,6.7,19.9,101.95,1015.7,0,0,0,11,14,50,7.3,88

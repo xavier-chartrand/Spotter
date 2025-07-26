@@ -1,4 +1,4 @@
-Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gust, Wind Direction, Air Temperature, Humidity
+Date, Water Temperature, Salinity, Pressure, Density, Wave Period, Wave Mean Height, Wave Significant Height, Wind Speed, Wind Gusts, Wind Provenance, Air Temperature, Humidity
 2018-04-14T18:30,15.5,0,102.4,0,8.2,0,7.8,0,0,70,17.8,18
 2018-04-14T18:45,15.5,0,102.43001,0,6.4,0,7.2,0,0,51,17.9,18
 2018-04-14T19:00,15.5,0,102.43001,0,8.4,0,7.6,0,0,84,17.9,18
