@@ -48,12 +48,12 @@ from spot_utils import *
 # lvl1_file:    'lvl1' file to write
 # lvl2_file:    'lvl2' file to write
 # ---------- #
-buoy       = 'spot-0572'
-year       = 2023
-H          = 10
+buoy       = 'spot-X'
+year       = XXXX
+H          = X
 
-cbd        = '2023-06-06T00:00:00'
-ced        = '2023-06-09T21:30:00'
+cbd        = 'XXXX-XX-XXTXX:XX:XX'
+ced        = 'XXXX-XX-XXTXX:XX:XX'
 
 filt_bool  = True
 filt_type  = 'hp'
@@ -228,11 +228,11 @@ qfst_d = {'Test_9':{'Do_Test':True,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':True},
-          'Test_11':{'Do_Test':False,
-                     'imin':[-50,-50,-10],
-                     'imax':[50,50,10],
-                     'lmin':[-50,-50,-10],
-                     'lmax':[50,50,10],
+          'Test_11':{'Do_Test':True,
+                     'imin':-50,
+                     'imax':50,
+                     'lmin':-50,
+                     'lmax':50,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':True},
