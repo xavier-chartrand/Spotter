@@ -149,8 +149,8 @@ def test11(st,*args):
     if len(where(isnan(st))[0])==len(st): return st,9
 
     # Check if values are in a valid range
-    bexp_i = (min(st)<imin)*(max(st)>imax)
-    bexp_l = (min(st)<lmin)*(max(st)>lmax)
+    bexp_i = min(st)<imin or max(st)>imax
+    bexp_l = min(st)<lmin or max(st)>lmax
     if   bexp_i: return st,4                    # (4), out of "i" range
     elif bexp_l: return st,3                    # (3), out of "l" range
     else:        return st,1                    # (1), in range

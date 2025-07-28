@@ -390,9 +390,17 @@ def writeLvl0(lvl_d,qfst_d):
     lon,lat = location[:,0],location[:,1]
 
     ## QUALITY CONTROL FOR SHORT-TERM ACCELERATION TIME SERIES
-    # Format ST test dictionnaries for each variable
     # Loop over "lvl0_vars"
-    for v in lvl0_vars:
+    for i in range(len(lvl0_vars)):
+        # Get variable and test parameters
+        v       = lvl0_vars[i]
+        vname   = 'Displacement_%s'%(v.upper())
+        imin_11 = qfst_d['Test_11']['imin'][i]
+        imax_11 = qfst_d['Test_11']['imax'][i]
+        lmin_11 = qfst_d['Test_11']['lmin'][i]
+        lmax_11 = qfst_d['Test_11']['lmax'][i]
+
+        # Create test parameter dictionnary
         exec(f"global qfst_{v}; qfst_{v}=deepcopy(qfst_d)",globals(),locals())
 
         # Remove precalculated 'QF' if 'Do_Test' is false
@@ -401,10 +409,13 @@ def writeLvl0(lvl_d,qfst_d):
                 exec(f"if not qfst_{v}[k]['Do_Test']: qfst_{v}[k]['QF']=[]",
                      globals(),locals())
 
-    # Compute displacement quality flag
-    for i in range(len(lvl0_vars)):
-        v     = lvl0_vars[i]
-        vname = 'Displacement_%s'%(v.upper())
+        # Update test 11
+        exec(f"qfst_{v}['Test_11']['imin']=imin_11",globals(),locals())
+        exec(f"qfst_{v}['Test_11']['imax']=imax_11",globals(),locals())
+        exec(f"qfst_{v}['Test_11']['lmin']=lmin_11",globals(),locals())
+        exec(f"qfst_{v}['Test_11']['lmax']=lmax_11",globals(),locals())
+
+        # Compute displacement quality flag
         exec(f"global {v}_disp; global qf_{v}_disp;"+\
              f"{v}_disp,qf_{v}_disp=getSTQF(data[:,i,:],vname,qfst_{v})",
              globals(),locals())

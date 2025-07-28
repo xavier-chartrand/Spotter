@@ -55,7 +55,7 @@ H          = 200
 cbd        = '2023-05-30T00:00:00'
 ced        = '2023-08-17T19:30:00'
 
-filt_bool  = True
+filt_bool  = False
 filt_type  = 'hp'
 filt_data  = 'wnum'
 C0         = 2.E2
@@ -210,9 +210,10 @@ lvl_d = {'Info':{'Id':buoy,
                       'H':H}}
 
 ## QUALITY FLAG PARAMETERS
-testinit   = []
-test_order = ['18','14','15','20','19','16','17','13','12','10','9','11']
-l2v_order  = ['hm0','tmn10','tm01','tm02','fp','tm','tp','sm','sp']
+testinit      = []
+test_order_st = ['13','12','10','9','11']
+test_order_lt = ['18','14','15','20','19','16','17','12','9']
+l2v_order     = ['hm0','tmn10','tm01','tm02','fp','tm','tp','sm','sp']
 
 # Short-term
 qfst_d = {'Test_9':{'Do_Test':True,
@@ -228,11 +229,11 @@ qfst_d = {'Test_9':{'Do_Test':True,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':True},
-          'Test_11':{'Do_Test':True,
-                     'imin':-50,
-                     'imax':50,
-                     'lmin':-50,
-                     'lmax':50,
+          'Test_11':{'Do_Test':False,
+                     'imin':[-50,-50,-10],
+                     'imax':[50,50,10],
+                     'lmin':[-50,-50,-10],
+                     'lmax':[50,50,10],
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':True},
@@ -247,7 +248,7 @@ qfst_d = {'Test_9':{'Do_Test':True,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':False},
-          'Test_Order':test_order}
+          'Test_Order':test_order_st}
 
 # Long-term
 qflt_d = {'Test_14':{'Do_Test':False,
@@ -289,7 +290,7 @@ qflt_d = {'Test_14':{'Do_Test':False,
                      'QF':testinit},
           'Tickers_Order':bwp_tickers,
           'LVL2_Vars_Order':l2v_order,
-          'Test_Order':test_order}
+          'Test_Order':test_order_lt}
 
 ## OUTPUTS
 # Write 'lvl0' displacement data
