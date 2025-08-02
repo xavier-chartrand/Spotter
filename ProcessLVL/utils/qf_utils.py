@@ -146,14 +146,14 @@ def test11(st,*args):
     imin,imax,lmin,lmax = tuple(args)
 
     # Quit if all "NaN", return 9 (missing data)
-    if len(where(isnan(st))[0])==len(st): return st,9
+    if len(where(isnan(st))[0])==len(st): return 9
 
     # Check if values are in a valid range
     bexp_i = min(st)<imin or max(st)>imax
     bexp_l = min(st)<lmin or max(st)>lmax
-    if   bexp_i: return st,4                    # (4), out of "i" range
-    elif bexp_l: return st,3                    # (3), out of "l" range
-    else:        return st,1                    # (1), in range
+    if   bexp_i: return 4                       # (4), out of "i" range
+    elif bexp_l: return 3                       # (3), out of "l" range
+    else:        return 1                       # (1), in range
 
 # ----------
 def test12(st,*args):
@@ -589,18 +589,34 @@ def getQFCombined(qfa,qfb,qf_ord):
     pqa,sqa = [q for q in qfa.split('.')]
     pqb,sqb = [q for q in qfb.split('.')]
 
-    if pqa>pqb:
-        prm = pqa
-        sec = sqa
-    elif pqa<pqb:
-        prm = pqb
-        sec = sqb
+    # Check if "sqa","sqb" in "qf_ord"
+    bexp_a = sqa in qf_ord
+    bexp_b = sqb in qf_ord
+
+    if not bexp_a and not bexp_b:
+        prm = '9' if (pqa=='9' or pqb=='9') else\
+              '2' if (pqa=='2' and pqb=='2') else\
+              '1'
+        sec = '0'
+    elif bexp_a and not bexp_b:
+        prm,sec = pqa,sqa
+    elif not bexp_a and bexp_b:
+        prm,sec = pqb,sqb
     else:
-        prm = pqa
-        i_a = where([q==sqa for q in qf_ord])[0][0] if sqa!='0' else nan
-        i_b = where([q==sqb for q in qf_ord])[0][0] if sqb!='0' else nan
-        sec = array(qf_ord)[nanmin([i_a,i_b])] if ~isnan(i_a) or ~isnan(i_a)\
-              else 0
+        if pqa>pqb:
+            prm = pqa
+            sec = sqa
+        elif pqa<pqb and sqb in qf_ord:
+            prm = pqb
+            sec = sqb
+        else:
+            prm = pqa
+            i_a = where([q==sqa for q in qf_ord])[0][0]\
+                  if sqa in qf_ord and sqa!='0' else nan
+            i_b = where([q==sqb for q in qf_ord])[0][0]\
+                  if sqb in qf_ord and sqb!='0' else nan
+            sec = array(qf_ord)[int(nanmin([i_a,i_b]))]\
+                  if ~isnan(i_a) or ~isnan(i_a) else 0
 
     # Return combined quality flag
     return '%s.%s'%(prm,sec)

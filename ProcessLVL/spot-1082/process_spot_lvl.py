@@ -55,7 +55,7 @@ H          = 200
 cbd        = '2023-05-30T00:00:00'
 ced        = '2023-08-17T19:30:00'
 
-filt_bool  = False
+filt_bool  = True
 filt_type  = 'hp'
 filt_data  = 'wnum'
 C0         = 2.E2
@@ -211,8 +211,8 @@ lvl_d = {'Info':{'Id':buoy,
 
 ## QUALITY FLAG PARAMETERS
 testinit      = []
-test_order_st = ['13','12','10','9','11']
-test_order_lt = ['18','14','15','20','19','16','17','12','9']
+test_order_st = ['13','10','11','9','12']
+test_order_lt = ['18','14','15','20','19','16','17','9','12']
 l2v_order     = ['hm0','tmn10','tm01','tm02','fp','tm','tp','sm','sp']
 
 # Short-term

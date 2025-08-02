@@ -933,7 +933,7 @@ def writeLvl2(lvl_d,qflt_d):
             exec(f"qflt_{v}['Test_19']['prev_qf']=qflt_{bwp}['Test_19']['QF']",
                  globals(),locals())
 
-    # Recalculate QF secondary including ST QF and test 19 results
+    # Recalculate QF secondary including some ST QF and test 19 results
     qf_ord = qflt_d['Test_Order']
     for v in l2v_order:
         exec(f"qflt_{v}['Test_19']['QF']=qflt_{bwp}['Test_19']['QF']",
