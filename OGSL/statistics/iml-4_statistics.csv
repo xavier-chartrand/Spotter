@@ -1,18 +1,18 @@
 # STATION iml-4
-# YEARS   2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024
+# YEARS   2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025
 
 Parameter,                min,       max,       mean,      std,       set size
-Air Temperature,          -9.9655,   28.6559,   9.3452,    3.8621,    145083
+Air Temperature,          -9.7349,   28.5611,   9.4131,    3.8296,    150461
 Humidity,                 nan,       nan,       nan,       nan,       0
-Density,                  1011.7474, 1029.7841, 1020.7657, 1.8037,    133078
-Pressure,                 97.4588,   105.2337,  101.3462,  0.7775,    145077
-Salinity,                 15.6724,   37.007,    26.3397,   2.1335,    144258
-Water Temperature,        0,         22.9008,   7.7673,    3.0267,    145309
-Wind Speed,               0,         33.4854,   8.8854,    4.92,      144429
-Wind Gusts,               0,         43.6664,   11.3103,   6.4712,    144646
+Density,                  1011.8163, 1029.727,  1020.7716, 1.7911,    138459
+Pressure,                 97.4811,   105.2237,  101.3524,  0.7743,    150471
+Salinity,                 15.735,    36.9977,   26.3663,   2.1263,    149679
+Water Temperature,        0,         22.911,    7.822,     3.0178,    150704
+Wind Speed,               0,         33.355,    8.8578,    4.8994,    149824
+Wind Gusts,               0,         43.4891,   11.276,    6.4426,    150041
 Wind Provenance,          0,         360,       nan,       nan,       0
-Wave Significant Height,  0.02,      3.7127,    0.6785,    0.6068,    142909
-Wave Period,              1.25,      17.8905,   2.835,     1.5055,    144002
+Wave Significant Height,  0.02,      3.6914,    0.6716,    0.6039,    148304
+Wave Period,              1.25,      17.8569,   2.82,      1.5037,    149396
 Wave Mean Direction,      0,         360,       nan,       nan,       0
 Wave Peak Direction,      0,         360,       nan,       nan,       0
 Wave Mean Spreading,      0,         80,        nan,       nan,       0

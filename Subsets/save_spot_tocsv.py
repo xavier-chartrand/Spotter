@@ -18,7 +18,7 @@ def sh(s): os.system("bash -c '%s'"%s)
 
 ## MAIN
 # Buoy information
-buoy    = 'spot-1082'
+buoy    = 'spot-0572'
 year    = '2023'
 cbd     = '2023-01-01T00:00:00'
 ced     = '2023-12-31T23:59:59'

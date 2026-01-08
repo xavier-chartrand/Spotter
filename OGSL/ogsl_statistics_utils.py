@@ -1,8 +1,8 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
 #         xavier.chartrand@uqar.ca
-#         xavier.chartrand@ec.gc.ca
 
 '''
 OGSL statistics utilities.
