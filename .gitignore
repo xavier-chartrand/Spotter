@@ -4,8 +4,12 @@ lvl*
 
 OGSL/__pycache__
 
-RawData/
 
 ParsedData/
 
 ProcessLVL/spot-*/__pycache__
+
+RawData/
+
+Subsets/csv*
+Subsets/lvl*

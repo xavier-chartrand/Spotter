@@ -1,10 +1,11 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
+#         xavier.chartrand@uqar.ca
 
 '''
-Save AZMP wave parameters data to CSV format.
+Save Spotter wave parameters data to CSV format.
 '''
 
 # Module
@@ -18,7 +19,7 @@ def sh(s): os.system("bash -c '%s'"%s)
 
 ## MAIN
 # Buoy information
-buoy    = 'spot-0572'
+buoy    = 'spot-1082'
 year    = '2023'
 cbd     = '2023-01-01T00:00:00'
 ced     = '2023-12-31T23:59:59'

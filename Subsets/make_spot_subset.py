@@ -1,10 +1,11 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
+#         xavier.chartrand@uqar.ca
 
 '''
-Retrieve a subset of AZMP data.
+Retrieve a subset of Spotter data.
 '''
 
 # Module
@@ -15,8 +16,8 @@ import xarray as xr
 
 ## MAIN
 # Buoy information
-buoy    = 'iml-4'
-year    = '2024'
+buoy    = 'spot-1082'
+year    = '2023'
 cbd     = '2023-08-01T00:00:00'
 ced     = '2023-08-31T23:59:59'
 lvl     = '2'
