@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
 #         xavier.chartrand@uqar.ca
 
 '''
@@ -23,10 +23,6 @@ from spot_utils import *
 # buoy:         Buoy station to process (spot-[0572,1082])
 # year:         Year to process
 # H:            Water depth underneath the platform
-
-# Corrected date for good values
-# cbd:          Begin date (timestamp) for which values start to be good
-# ced:          End date (timestmap) for which values end to be good
 
 # 'filt_p'
 # filt_bool:    Flag to apply ButterWorth filter
@@ -52,9 +48,6 @@ buoy       = 'spot-X'
 year       = XXXX
 H          = X
 
-cbd        = 'XXXX-XX-XXTXX:XX:XX'
-ced        = 'XXXX-XX-XXTXX:XX:XX'
-
 filt_bool  = True
 filt_type  = 'hp'
 filt_data  = 'wnum'
@@ -76,6 +69,13 @@ lvl2_file  = 'lvl2_waveparameters.nc'
 ## END STREAM EDITOR
 
 ## MAIN
+# Corrected date for good values (check good_timestamps.txt) are harcoded here
+# cbd:          Begin date (timestamp), when buoy is fully deployed
+# ced:          End date (timestmap), when buoy is ready for removal
+if year==XXXX:
+    cbd = 'XXXX-XX-XXTXX:XX:XX'
+    ced = 'XXXX-XX-XXTXX:XX:XX'
+
 # Physical parameters
 rho_0 = 1000                                    # reference density [kg/m3]
 g     = 9.81                                    # gravity acceleration [m/s2]

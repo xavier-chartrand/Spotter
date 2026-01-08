@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
 #         xavier.chartrand@uqar.ca
 
 '''
@@ -707,11 +707,11 @@ def getQFSecondary(qf_dct):
      for o in qf_ord]
 
     # Matricize primary indice
-    m1 = np.transpose([[q==1 for q in qf] for qf in qf_val])
-    m2 = np.transpose([[q==2 for q in qf] for qf in qf_val])
-    m3 = np.transpose([[q==3 for q in qf] for qf in qf_val])
-    m4 = np.transpose([[q==4 for q in qf] for qf in qf_val])
-    m9 = np.transpose([[q==9 for q in qf] for qf in qf_val])
+    m1 = transpose([[q==1 for q in qf] for qf in qf_val])
+    m2 = transpose([[q==2 for q in qf] for qf in qf_val])
+    m3 = transpose([[q==3 for q in qf] for qf in qf_val])
+    m4 = transpose([[q==4 for q in qf] for qf in qf_val])
+    m9 = transpose([[q==9 for q in qf] for qf in qf_val])
 
     # Append code to corresponding first flagged test
     # 9-4-3-2-1 code priority

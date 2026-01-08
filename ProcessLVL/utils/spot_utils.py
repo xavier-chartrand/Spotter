@@ -1,7 +1,7 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
 #         xavier.chartrand@uqar.ca
 
 '''
@@ -810,7 +810,7 @@ def writeLvl2(lvl_d,qflt_d):
         # Compute weighted directional moments
         if all(~isnan(CS[0])):
             A1_mean,B1_mean,A2_mean,B2_mean =\
-            getDirMoments(CS,weight=True,Ef=Ef,fs=np.diff(freq)[0])
+            getDirMoments(CS,weight=True,Ef=Ef,fs=diff(freq)[0])
 
             # Compute mean variables and convert angles to true north degrees
             _tm = (3*pi/2-arctan2(B1_mean,A1_mean))%(2*pi)
@@ -823,7 +823,7 @@ def writeLvl2(lvl_d,qflt_d):
                 B1_max = B1[ifmax]
                 _fp    = freq[ifmax]
                 _wp    = wnum[ifmax]
-                _tp    = (3*pi/2-np.arctan2(B1_max,A1_max))%(2*pi)
+                _tp    = (3*pi/2-arctan2(B1_max,A1_max))%(2*pi)
                 _sp    = (2*(1-(A1_max**2+B1_max**2)**(1/2)))**(1/2)
             else: _fp,_wp,_tp,_sp     = [nan for _ in range(4)]
         else: _tm,_sm,_fp,_wp,_tp,_sp = [nan for _ in range(6)]
