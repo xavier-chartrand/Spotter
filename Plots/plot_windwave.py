@@ -1,10 +1,11 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
+#         xavier.chartrand@uqar.ca
 
 '''
-Plot wind provenance versus wave provenance for a given AZMP buoy and year.
+Plot wind provenance versus wave provenance for a given Spotter buoy and year.
 '''
 
 # Modules
