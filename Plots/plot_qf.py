@@ -1,10 +1,11 @@
 #!/usr/bin/python -u
 # Author: Xavier Chartrand
-# Email : x.chartrand@protonmail.me
-#         xavier.chartrand@ec.gc.ca
+# Email : xavier.chartrand@ec.gc.ca
+#         xavier.chartrand@proton.me
+#         xavier.chartrand@uqar.ca
 
 '''
-Plot the quality flag histogram for windwave data
+Plot the quality flag histogram for windwave data.
 '''
 
 # Modules
