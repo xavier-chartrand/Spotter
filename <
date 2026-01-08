@@ -1,9 +1,0 @@
-ParsedData/
-
-lvl*
-
-OGSL/__pycache__
-
-RawData/
-
-ProcessLVL/spot-*/__pycache__
