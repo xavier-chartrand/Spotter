@@ -153,17 +153,17 @@ DSogsl = pd.read_csv(odata_dir+odata_file,
                      delimiter=',',
                      skipinitialspace=True,
                      skiprows=3)
-bwp    = np.array([p.rstrip(' ') for p in DSogsl['Parameter']])
+bwp    = array([p.rstrip(' ') for p in DSogsl['Parameter']])
 for key in bwp_sel:
-    mean_var = DSogsl['mean'][np.where(bwp==key)[0][0]]
-    min_var  = DSogsl['min'][np.where(bwp==key)[0][0]]
-    std_var  = DSogsl['std'][np.where(bwp==key)[0][0]]
+    mean_var = DSogsl['mean'][where(bwp==key)[0][0]]
+    min_var  = DSogsl['min'][where(bwp==key)[0][0]]
+    std_var  = DSogsl['std'][where(bwp==key)[0][0]]
     if key=='Wave Period':
         n_std   = 2
-        max_var = max(DSogsl['max'][np.where(bwp==key)[0][0]],1/fcut)
+        max_var = max(DSogsl['max'][where(bwp==key)[0][0]],1/fcut)
     else:
         n_std   = 1
-        max_var = DSogsl['max'][np.where(bwp==key)[0][0]]
+        max_var = DSogsl['max'][where(bwp==key)[0][0]]
     bwp_rmin.append(min_var)
     bwp_rmax.append(max_var)
     bwp_mean.append(mean_var)
@@ -238,13 +238,13 @@ qfst_d = {'Test_9':{'Do_Test':True,
                      'Type':'hv',
                      'Update_Data':True},
           'Test_12':{'Do_Test':True,
-                     'm':int(np.ceil(2*fs/fcut)),
+                     'm':int(ceil(2*fs/fcut)),
                      'delta':0.1,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':False},
           'Test_13':{'Do_Test':False,
-                     'N':np.nan,
+                     'N':nan,
                      'QF':testinit,
                      'Type':'hv',
                      'Update_Data':False},
