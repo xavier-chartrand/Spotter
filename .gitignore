@@ -8,9 +8,9 @@ ParsedData/
 
 ProcessLVL/update_runs
 ProcessLVL/send_runs
-ProcessLVL/*.sh
-ProcessLVL/*.o*
-ProcessLVL/*.e*
+ProcessLVL/spot-*/*.sh
+ProcessLVL/spot-*/*.o*
+ProcessLVL/spot-*/*.e*
 ProcessLVL/spot-*/__pycache__
 
 RawData/
