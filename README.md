@@ -9,5 +9,3 @@ Raw 3D displacement datasets are archived on Science HPCR clusters (https://scie
 Control for quality is done following a standard procedure for in situ surface wave data detailed in the Manual for Real-Time Quality Control of In-Situ Surface Wave Data (https://ioos.noaa.gov/ioos-in-action/wave-data/).
 
 For further details, please refer to Matte et. al. (2025): A benchmark dataset of water levels and waves for SWOT validation in the St. Lawrence Estuary and Saguenay Fjord, Quebec, Canada
-
-(/* INCLUDE URL ONCE PUBLISHED */)
